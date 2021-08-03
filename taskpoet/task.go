@@ -169,7 +169,9 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 		t.Added = now
 	}
 
-	t.ID = fmt.Sprintf(uuid.New().String())
+	if t.ID == "" {
+		t.ID = fmt.Sprintf(uuid.New().String())
+	}
 	t.Completed = now
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
@@ -197,6 +199,10 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 	now := time.Now()
 	if t.Added.IsZero() {
 		t.Added = now
+	}
+
+	if t.ID == "" {
+		t.ID = fmt.Sprintf(uuid.New().String())
 	}
 
 	// Handle defaults due

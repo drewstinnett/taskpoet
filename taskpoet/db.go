@@ -7,6 +7,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+type DBConfig struct {
+	Path string
+}
+
 type LocalClient struct {
 	DB   *bolt.DB
 	Task TaskService

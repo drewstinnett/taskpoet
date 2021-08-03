@@ -2,10 +2,7 @@ package taskpoet
 
 import (
 	"errors"
-	"fmt"
-	"math"
 	"os"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -195,7 +192,7 @@ func leadingFraction(s string) (x int64, scale float64, rem string) {
 	return x, scale, s[i:]
 }
 
-func HumanizeDuration(duration time.Duration) string {
+/*func HumanizeDuration(duration time.Duration) string {
 	days := int64(duration.Hours() / 24)
 	hours := int64(math.Mod(duration.Hours(), 24))
 	minutes := int64(math.Mod(duration.Minutes(), 60))
@@ -225,4 +222,4 @@ func HumanizeDuration(duration time.Duration) string {
 	}
 
 	return strings.Join(parts, " ")
-}
+}*/

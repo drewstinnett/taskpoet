@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/drewstinnett/taskpoet/branch/main/graph/badge.svg?token=06C30FNUO5)](https://codecov.io/gh/drewstinnett/taskpoet)
+
 # TaskPoet
 
 Alternative to the awesome TaskWarrior app, with a few changes in mind:

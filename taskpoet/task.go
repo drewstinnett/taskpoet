@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -21,6 +22,7 @@ type Task struct {
 
 type TaskService interface {
 	New(t, d *Task) (*Task, error)
+	NewSet(t []Task, d *Task) error
 	Log(t, d *Task) (*Task, error)
 	List(prefix string) ([]Task, error)
 	Complete(t *Task) error
@@ -189,6 +191,16 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 	return t, nil
 
 }
+func (svc *TaskServiceOp) NewSet(t []Task, d *Task) error {
+	for _, task := range t {
+		_, err := svc.New(&task, d)
+		if err != nil {
+			log.Debug("Error adding task in set", t)
+			return err
+		}
+	}
+	return nil
+}
 
 func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 	// t is the new task
@@ -201,6 +213,7 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 		t.Added = now
 	}
 
+	// If no ID is set, just generate one
 	if t.ID == "" {
 		t.ID = fmt.Sprintf(uuid.New().String())
 	}
@@ -211,7 +224,6 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 			t.Due = d.Due
 		}
 	}
-	t.ID = fmt.Sprintf(uuid.New().String())
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -264,35 +276,4 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 
 	return allIDs, nil
 
-}
-
-func QueryTasks(localClient *LocalClient, queryFn func(t Task) bool, limit int) ([]Task, error) {
-	var results []Task
-	var err error
-
-	err = localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
-		if err != nil {
-			return err
-		}
-		err = b.ForEach(func(k, v []byte) error {
-			var task Task
-			err = json.Unmarshal(v, &task)
-			if err != nil {
-				return err
-			}
-			//log.Println(task)
-			results = append(results, task)
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
 }

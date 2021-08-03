@@ -1,0 +1,19 @@
+---
+version: '3'
+tasks:
+  prep:
+    deps:
+      - test
+      - doc
+  doc:
+    cmds:
+      - gomarkdoc $(go list ./... | grep -v example) > doc/README.md
+  deeplint:
+    cmds:
+      - golangci-lint run --enable-all
+  test:
+    cmds:
+      - go test github.com/drewstinnett/taskpoet/taskpoet
+  cover:
+    cmds:
+      - go test -coverprofile=/tmp/gocover $(go list ./... | grep -v example) && go tool cover -html=/tmp/gocover

@@ -1,5 +1,5 @@
 ---
-name: Test and coverage
+name: Tests
 
 on:
   push:

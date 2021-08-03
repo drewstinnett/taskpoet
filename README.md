@@ -1,6 +1,5 @@
 [![codecov](https://codecov.io/gh/drewstinnett/taskpoet/branch/main/graph/badge.svg?token=06C30FNUO5)](https://codecov.io/gh/drewstinnett/taskpoet)
-[![Test](https://github.com/drewstinnett/taskpoet/actions/workflows/coverage.yml/badge.svg)](https://github.com/drewstinnett/taskpoet/actions/workflows/coverage.yml)
-
+[![Tests](https://github.com/drewstinnett/taskpoet/actions/workflows/coverage.yml/badge.svg)](https://github.com/drewstinnett/taskpoet/actions/workflows/coverage.yml)
 # TaskPoet
 
 Alternative to the awesome TaskWarrior app, with a few changes in mind:

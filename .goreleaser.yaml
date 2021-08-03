@@ -1,0 +1,31 @@
+---
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cli/
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: '386'
+    binary: 'taskpoet'
+archives:
+  - format: tar.gz
+    name_template: 'taskpoet-{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    replacements:
+      darwin: macOS
+checksum:
+  name_template: 'taskpoet-{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+snapshot:
+  name_template: "{{ .Tag }}-snapshot"
+changelog:
+  skip: true

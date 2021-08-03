@@ -18,6 +18,8 @@ type Task struct {
 	HideUntil   time.Time `json:"hide_until,omitempty"`
 	Completed   time.Time `json:"completed,omitempty"`
 	Added       time.Time `json:"added,omitempty"`
+	Impact      int       `json:"impact,omitempty"`
+	Effort      int       `json:"effort,omitempty"`
 }
 
 type TaskService interface {

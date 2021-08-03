@@ -90,6 +90,8 @@ func TestGetByPartialID(t *testing.T) {
 		{Description: "foo", ID: "again with the fakeid again"},
 		{Description: "foo", ID: "fakeid"},
 		{Description: "foo", ID: "another_fakeid"},
+		{Description: "foo", ID: "dupthing-num-1"},
+		{Description: "foo", ID: "dupthing-num-2"},
 		{Description: "foo"},
 	}
 	err := localClient.Task.NewSet(ts, &emptyDefaults)
@@ -101,6 +103,18 @@ func TestGetByPartialID(t *testing.T) {
 		t.Error(err)
 	} else if task.ID != "fakeid" {
 		t.Errorf("Expected to retrive 'fakeid' but got %v", task.ID)
+	}
+
+	// Test for a non-unique partial
+	_, err = localClient.Task.GetByPartialID("dupthing", "/active")
+	if err == nil {
+		t.Error("Tried to get a partial that has duplicates, but got no error")
+	}
+
+	// Test for a non existant prefix
+	_, err = localClient.Task.GetByPartialID("this-will-never-exist", "/active")
+	if err == nil {
+		t.Error("Tried to match on a non existant partial id, but did not error")
 	}
 
 }
@@ -123,15 +137,12 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestGetByExactD(t *testing.T) {
-	_, err := localClient.Task.New(&taskpoet.Task{Description: "foo", ID: "fakeid"}, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
+	ts := []taskpoet.Task{
+		{Description: "foo", ID: "fakeid"},
+		{Description: "foo", ID: "another_fakeid"},
+		{Description: "foo"},
 	}
-	_, err = localClient.Task.New(&taskpoet.Task{Description: "foo", ID: "another_fakeid"}, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = localClient.Task.New(&taskpoet.Task{Description: "foo"}, &emptyDefaults)
+	err := localClient.Task.NewSet(ts, &emptyDefaults)
 	if err != nil {
 		t.Error(err)
 	}
@@ -140,6 +151,11 @@ func TestGetByExactD(t *testing.T) {
 		t.Error(err)
 	} else if task.ID != "another_fakeid" {
 		t.Errorf("Expected to retrive 'another_fakeid' but got %v", task.ID)
+	}
+
+	_, err = localClient.Task.GetByExactID("another", "/active")
+	if err == nil {
+		t.Error("Did not error when checking for an exact id that does not exist")
 	}
 
 }

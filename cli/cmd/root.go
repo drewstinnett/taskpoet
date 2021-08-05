@@ -22,7 +22,17 @@ var rootCmd = &cobra.Command{
 	Use:   "taskpoet",
 	Short: "Do task tracking similiar to the olden ways of TaskWarrior",
 	Long: `Designed to be similar to TaskWarrior, with some updated features, and specifics
-around the Tom Limoncelli methods to task management`,
+around the Tom Limoncelli methods to task management.
+
+Key Concepts:
+
+Effort/Impact Assessment, based on Limoncelli concept
+
+0 - Unset
+1 - Low Effort, High Impact (Sweet Spot)
+2 - High Effort, High Impact (Homework)
+3 - Low Effort, Low Impact (Busywork)
+4 - High Effort, Low Impact (Charity)`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },

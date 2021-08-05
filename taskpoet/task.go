@@ -7,19 +7,44 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pterm/pterm"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
 type Task struct {
-	ID          string    `json:"id"`
-	Description string    `json:"description"`
-	Due         time.Time `json:"due,omitempty"`
-	HideUntil   time.Time `json:"hide_until,omitempty"`
-	Completed   time.Time `json:"completed,omitempty"`
-	Added       time.Time `json:"added,omitempty"`
-	Impact      int       `json:"impact,omitempty"`
-	Effort      int       `json:"effort,omitempty"`
+	ID           string    `json:"id"`
+	Description  string    `json:"description"`
+	Due          time.Time `json:"due,omitempty"`
+	HideUntil    time.Time `json:"hide_until,omitempty"`
+	Completed    time.Time `json:"completed,omitempty"`
+	Added        time.Time `json:"added,omitempty"`
+	EffortImpact uint      `json:"effort_impact,omitempty"`
+}
+
+func (t *Task) ShortID() string {
+	if len(t.ID) > 5 {
+		return t.ID[0:5]
+	} else {
+		return t.ID
+	}
+}
+
+func (t Task) Describe() {
+	//data := make([][]string, 0)
+	now := time.Now()
+	due := HumanizeDuration(t.Due.Sub(now))
+	added := HumanizeDuration(t.Added.Sub(now))
+	data := [][]string{
+		{"Field", "Value", "Read-Value"},
+		{"ID", t.ShortID(), t.ID},
+		{"Description", t.Description, ""},
+		{"Added", added, fmt.Sprintf("%+v", t.Added)},
+		{"Due", due, fmt.Sprintf("%+v", t.Due)},
+		{"Effort/Impact", EffortImpactText(int(t.EffortImpact)), fmt.Sprintf("%+v", t.EffortImpact)},
+	}
+
+	pterm.DefaultTable.WithHasHeader().WithData(data).Render()
 }
 
 type TaskService interface {
@@ -249,10 +274,6 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 
 	return t, nil
 
-}
-
-func FilterAllTasks(t Task) bool {
-	return true
 }
 
 func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {

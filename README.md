@@ -16,12 +16,12 @@ need to do. Represented in our Task structure as follows:
 
 Impact:
 * 0: Unspecified Impact (default)
-* 1: Big Positive Impact (default)
-* 2: Superficial Impact (default)
+* 1: Big Positive Impact
+* 2: Superficial Impact
 
 Effort:
 * 0: Unspecified Effort (default)
-* 1: Easy, Small Effort (default)
-* 2: Difficult, Big Effort (default)
+* 1: Easy, Small Effort
+* 2: Difficult, Big Effort
 
 The lower representation of these numbers is the hot spot

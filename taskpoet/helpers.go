@@ -226,3 +226,35 @@ func HumanizeDuration(duration time.Duration) string {
 
 	return strings.Join(parts, " ")
 }
+
+func CheckUniqueStringSlice(target []string) bool {
+	uniqueSlice := FilterUniqueStrings(target)
+	if len(uniqueSlice) != len(target) {
+		return false
+	} else {
+		return true
+	}
+}
+
+func FilterUniqueStrings(target []string) []string {
+	uniqueMap := make(map[string]bool)
+	var uniqueNames []string
+
+	for _, dev := range target {
+		if _, exists := uniqueMap[dev]; !exists {
+			uniqueMap[dev] = true
+			uniqueNames = append(uniqueNames, dev)
+		}
+	}
+	return uniqueNames
+}
+
+func ContainsString(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+
+	return false
+}

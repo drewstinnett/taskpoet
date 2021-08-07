@@ -29,7 +29,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 			Description:  strings.Join(args, " "),
 			EffortImpact: effortImpact,
 		}
-		found, err := localClient.Task.New(t, taskDefaults)
+		found, err := localClient.Task.Add(t, taskDefaults)
 		CheckErr(err)
 		found.Describe()
 	},

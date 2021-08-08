@@ -22,7 +22,7 @@ actual TODO list`,
 			Description: args[0],
 			Completed:   time.Now(),
 		}
-		found, err := localClient.Task.New(t, taskDefaults)
+		found, err := localClient.Task.Add(t, taskDefaults)
 		CheckErr(err)
 		log.Println(found)
 	},

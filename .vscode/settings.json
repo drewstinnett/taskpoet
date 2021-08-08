@@ -1,0 +1,5 @@
+{
+  "go.testOnSave": true,
+  "go.coverOnSave": true,
+  "go.coverageOptions": "showUncoveredCodeOnly"
+}

@@ -49,3 +49,16 @@ func TestParseInvalidDuration(t *testing.T) {
 
 	}
 }
+
+func TestUniqueSlices(t *testing.T) {
+	nodups := []string{"a", "b", "c"}
+	dups := []string{"c", "b", "c"}
+
+	if !taskpoet.CheckUniqueStringSlice(nodups) {
+		t.Error("Checking slice with no duplicates detected duplicates")
+	}
+
+	if taskpoet.CheckUniqueStringSlice(dups) {
+		t.Error("Checking a slice with dups did not detect dups")
+	}
+}

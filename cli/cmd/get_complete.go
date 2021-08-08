@@ -12,10 +12,10 @@ import (
 
 // getPendingCmd represents the getPending command
 var getCompleteCmd = &cobra.Command{
-	Use:     "complete",
-	Short:   "Get Complete tasks",
-	Aliases: []string{"c"},
-	Long: `Get Complete Tasks
+	Use:     "completed",
+	Short:   "Get Completed tasks",
+	Aliases: []string{"c", "complete"},
+	Long: `Get Completed Tasks
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		var results []taskpoet.Task

@@ -6,7 +6,7 @@ import (
 
 // getCmd represents the get command
 var getCmd = &cobra.Command{
-	Use:     "get",
+	Use:     "get active|completed",
 	Short:   "Get tasks",
 	Long:    `Get tasks`,
 	Aliases: []string{"g"},

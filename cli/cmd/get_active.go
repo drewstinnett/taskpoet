@@ -13,7 +13,7 @@ import (
 // getPendingCmd represents the getPending command
 var getActiveCmd = &cobra.Command{
 	Use:     "active",
-	Short:   "Get Active tasks",
+	Short:   "Get Active tasks, waiting to be completed",
 	Aliases: []string{"a"},
 	Long: `Get Active Tasks
 `,
@@ -33,7 +33,7 @@ var getActiveCmd = &cobra.Command{
 			age := humanize.Time(task.Added)
 			//hrDuration := durafmt.Parse(duration).LimitFirstN(1) // // limit first two parts.
 
-			row := []string{fmt.Sprintf("%v", task.ID[0:5]), age, task.Description, humanize.Time(task.Due)}
+			row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, humanize.Time(task.Due)}
 			data = append(data, row)
 		}
 		pterm.DefaultTable.WithHasHeader().WithData(data).Render()

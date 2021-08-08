@@ -36,8 +36,13 @@ type TaskService interface {
 	Add(t, d *Task) (*Task, error)
 	AddSet(t []Task, d *Task) error
 
+	// Helper for adding Parent
+	AddParent(c, p *Task) error
+	AddChild(p, c *Task) error
+
 	// Edit a Task entry
 	Edit(t *Task) (*Task, error)
+	EditSet(t []Task) error
 
 	// Check to ensure Task is in a valid state
 	Validate(t *Task, o *TaskValidateOpts) error
@@ -54,6 +59,32 @@ type TaskService interface {
 	GetIDsByPrefix(prefix string) ([]string, error)
 }
 
+func (svc *TaskServiceOp) AddParent(c, p *Task) error {
+
+	c.Parents = append(c.Parents, p.ID)
+	p.Children = append(p.Children, c.ID)
+
+	err := svc.EditSet([]Task{*c, *p})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (svc *TaskServiceOp) AddChild(p, c *Task) error {
+
+	p.Children = append(p.Children, c.ID)
+	c.Parents = append(c.Parents, p.ID)
+
+	err := svc.EditSet([]Task{*c, *p})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (t *Task) DetectKeyPath() []byte {
 	// Is this a new active task, or just logging completed?
 	var keyPath string
@@ -64,6 +95,46 @@ func (t *Task) DetectKeyPath() []byte {
 	}
 	return []byte(keyPath)
 
+}
+
+func (svc *TaskServiceOp) EditSet(tasks []Task) error {
+	for _, t := range tasks {
+		originalTask, err := svc.GetByID(t.ID)
+		if err != nil {
+			return errors.New("Cannot edit a task that did not previously exist: " + t.ID)
+		}
+
+		// Right now we wanna use the Complete function to do this, not edit...at least yet
+		if originalTask.Completed != t.Completed {
+			return errors.New("Editing the Completed field is not yet supported as it changes the path")
+		}
+
+		err = svc.Validate(&t, &TaskValidateOpts{IsExisting: true})
+		if err != nil {
+			return err
+		}
+	}
+
+	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		for _, t := range tasks {
+			taskSerial, err := json.Marshal(t)
+			if err != nil {
+				return err
+			}
+			b := tx.Bucket([]byte("tasks"))
+			err = b.Put(t.DetectKeyPath(), taskSerial)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
@@ -120,6 +191,9 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 	// Make sure we didn't add ourself
 	if ContainsString(t.Parents, t.ID) {
 		return fmt.Errorf("Self id is set in the parents, we don't do that")
+	}
+	if ContainsString(t.Children, t.ID) {
+		return fmt.Errorf("Self id is set in the children, we don't do that")
 	}
 
 	// Make sure Parents contains no duplicates

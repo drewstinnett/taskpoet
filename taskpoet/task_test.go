@@ -238,14 +238,26 @@ func TestAddParent(t *testing.T) {
 	}
 }
 
-func TestTaskSelfAdd(t *testing.T) {
+func TestTaskSelfAddParent(t *testing.T) {
 	// Definitely don't add yourself to the parents array
-	kid, _ := lc.Task.Add(&taskpoet.Task{ID: "test-self-add", Description: "foo"}, nil)
+	kid, _ := lc.Task.Add(&taskpoet.Task{ID: "test-self-add-parent", Description: "foo"}, nil)
 
 	kid.Parents = append(kid.Parents, kid.ID)
 	_, err := lc.Task.Edit(kid)
 	if err == nil {
 		t.Error("Adding the a task as it's own parent did not return an error")
+	}
+
+}
+
+func TestTaskSelfAddChildren(t *testing.T) {
+	// Definitely don't add yourself to the children array
+	kid, _ := lc.Task.Add(&taskpoet.Task{ID: "test-self-add-child", Description: "foo"}, nil)
+
+	kid.Children = append(kid.Children, kid.ID)
+	_, err := lc.Task.Edit(kid)
+	if err == nil {
+		t.Error("Adding the a task as it's own children did not return an error")
 	}
 
 }
@@ -315,6 +327,98 @@ func TestEditDescription(t *testing.T) {
 	}
 	if edited.Description != "New" {
 		t.Error("Failed editing new description in Task")
+	}
+
+}
+
+func TestEditSet(t *testing.T) {
+	ts := []taskpoet.Task{
+		{Description: "Foo", ID: "edit-set-1"},
+		{Description: "Bar", ID: "edit-set-2"},
+	}
+	err := lc.Task.AddSet(ts, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+
+	test1, _ := lc.Task.GetByIDWithPrefix("edit-set-1", "/active")
+	test2, _ := lc.Task.GetByIDWithPrefix("edit-set-2", "/active")
+
+	editSet := []taskpoet.Task{*test1, *test2}
+
+	test2.Description = "New Description"
+	err = lc.Task.EditSet(editSet)
+	if err != nil {
+		t.Error(err)
+	}
+
+}
+func TestAddParentFunc(t *testing.T) {
+	tasks := []taskpoet.Task{
+		{ID: "kid-func", Description: "Kid task"},
+		{ID: "parent-func", Description: "Parent task"},
+	}
+
+	err := lc.Task.AddSet(tasks, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Get newly created items
+	kid, _ := lc.Task.GetByIDWithPrefix("kid-func", "/active")
+	parent, _ := lc.Task.GetByIDWithPrefix("parent-func", "/active")
+
+	// Make sure adding a parent works
+	err = lc.Task.AddParent(kid, parent)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Get newly Editted
+	kid, _ = lc.Task.GetByIDWithPrefix("kid-func", "/active")
+	parent, _ = lc.Task.GetByIDWithPrefix("parent-func", "/active")
+
+	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
+		t.Error("Setting parent via functiono did not work")
+	}
+
+	if !taskpoet.ContainsString(parent.Children, kid.ID) {
+		t.Error("Setting parent did not also set child on parent resource")
+	}
+
+}
+
+func TestAddChildFunc(t *testing.T) {
+	tasks := []taskpoet.Task{
+		{ID: "kid-func2", Description: "Kid task"},
+		{ID: "parent-func2", Description: "Parent task"},
+	}
+
+	err := lc.Task.AddSet(tasks, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Get newly created items
+	kid, _ := lc.Task.GetByIDWithPrefix("kid-func2", "/active")
+	parent, _ := lc.Task.GetByIDWithPrefix("parent-func2", "/active")
+
+	// Make sure adding a parent works
+	err = lc.Task.AddChild(parent, kid)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Get newly Editted
+	kid, _ = lc.Task.GetByIDWithPrefix("kid-func2", "/active")
+	parent, _ = lc.Task.GetByIDWithPrefix("parent-func2", "/active")
+
+	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
+		t.Error("Setting parent via functiono did not work")
+	}
+
+	if !taskpoet.ContainsString(parent.Children, kid.ID) {
+		t.Error("Setting parent did not also set child on parent resource")
 	}
 
 }

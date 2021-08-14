@@ -85,7 +85,7 @@ func TestBlankDescription(t *testing.T) {
 	}
 }
 
-func TestGetByPartialID(t *testing.T) {
+func TestGetByPartialIDWithPath(t *testing.T) {
 	ts := []taskpoet.Task{
 		{Description: "foo", ID: "again with the fakeid again"},
 		{Description: "foo", ID: "fakeid"},
@@ -420,5 +420,64 @@ func TestAddChildFunc(t *testing.T) {
 	if !taskpoet.ContainsString(parent.Children, kid.ID) {
 		t.Error("Setting parent did not also set child on parent resource")
 	}
+
+}
+
+func TestGetByPartialID(t *testing.T) {
+	ts := []taskpoet.Task{
+		{Description: "foo", ID: "partial-id-test"},
+		{Description: "foo", ID: "partial-id-test-2"},
+		{Description: "foo", ID: "unique-partial-id-test-2"},
+	}
+	err := lc.Task.AddSet(ts, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+	task, err := lc.Task.GetByPartialID("partial-id-test-2")
+	if err != nil {
+		t.Error(err)
+	} else if task.ID != "partial-id-test-2" {
+		t.Errorf("Expected to retrive 'partial-id-test-2' but got %v", task.ID)
+	}
+
+	// Test for a non-unique partial
+	_, err = lc.Task.GetByPartialID("partial-id")
+	if err == nil {
+		t.Error("Tried to get a partial that has duplicates, but got no error")
+	}
+
+	// Test for a non existant prefix
+	_, err = lc.Task.GetByPartialIDWithPath("this-will-never-exist", "/active")
+	if err == nil {
+		t.Error("Tried to match on a non existant partial id, but did not error")
+	}
+
+}
+
+func TestDescribe(t *testing.T) {
+	ts := []taskpoet.Task{
+		{Description: "foo", ID: "describe-test"},
+		{Description: "Some parent", ID: "describe-parent"},
+	}
+	lc.Task.AddSet(ts, &emptyDefaults)
+	task, _ := lc.Task.GetByPartialIDWithPath("describe-test", "/active")
+	taskP, _ := lc.Task.GetByPartialIDWithPath("describe-parent", "/active")
+	lc.Task.Describe(task)
+
+	// Describe with parent test
+	lc.Task.AddParent(task, taskP)
+	task, err := lc.Task.Edit(task)
+	if err != nil {
+		t.Error(err)
+	}
+	lc.Task.Describe(task)
+
+	// Describe with parent test
+	taskP, err = lc.Task.GetByPartialIDWithPath("describe-parent", "/active")
+	if err != nil {
+		t.Error(err)
+	}
+
+	lc.Task.Describe(taskP)
 
 }

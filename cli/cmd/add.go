@@ -25,13 +25,23 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 			log.Fatal("EfforImpact assessment must be less than 5")
 		}
 
+		parentS, _ := cmd.PersistentFlags().GetString("parent")
+
 		t := &taskpoet.Task{
 			Description:  strings.Join(args, " "),
 			EffortImpact: effortImpact,
 		}
+
 		found, err := localClient.Task.Add(t, taskDefaults)
 		CheckErr(err)
-		found.Describe()
+		if parentS != "" {
+			parent, err := localClient.Task.GetByPartialID(parentS)
+			CheckErr(err)
+			if parent != nil {
+				localClient.Task.AddParent(t, parent)
+			}
+		}
+		localClient.Task.Describe(found)
 	},
 }
 
@@ -44,6 +54,7 @@ func init() {
 	// and all subcommands, e.g.:
 	// addCmd.PersistentFlags().String("foo", "", "A help for foo")
 	addCmd.PersistentFlags().UintP("effort-impact", "e", 0, "Effort/Impact Score Assessment. See Help for more info")
+	addCmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -1,6 +1,7 @@
 package taskpoet
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,6 +41,9 @@ type TaskService interface {
 	AddParent(c, p *Task) error
 	AddChild(p, c *Task) error
 
+	// Describe something
+	Describe(t *Task) error
+
 	// Edit a Task entry
 	Edit(t *Task) (*Task, error)
 	EditSet(t []Task) error
@@ -55,6 +59,7 @@ type TaskService interface {
 	// Operations by ID (/$prefix/$id)
 	GetByID(id string) (*Task, error)
 	GetByIDWithPrefix(id string, prefix string) (*Task, error)
+	GetByPartialID(partialID string) (*Task, error)
 	GetByPartialIDWithPath(partialID string, prefix string) (*Task, error)
 	GetIDsByPrefix(prefix string) ([]string, error)
 }
@@ -211,12 +216,28 @@ func (t *Task) ShortID() string {
 	}
 }
 
-func (t Task) Describe() {
+func (svc *TaskServiceOp) Describe(t *Task) error {
 	//data := make([][]string, 0)
 	now := time.Now()
 	due := HumanizeDuration(t.Due.Sub(now))
 	added := HumanizeDuration(t.Added.Sub(now))
 	completed := HumanizeDuration(t.Completed.Sub(now))
+	var parentsBuff bytes.Buffer
+	var childrenBuff bytes.Buffer
+	for _, p := range t.Parents {
+		parent, err := svc.GetByID(p)
+		if err != nil {
+			return nil
+		}
+		parentsBuff.Write([]byte(parent.Description))
+	}
+	for _, c := range t.Children {
+		child, err := svc.GetByID(c)
+		if err != nil {
+			return nil
+		}
+		childrenBuff.Write([]byte(child.Description))
+	}
 	data := [][]string{
 		{"Field", "Value", "Read-Value"},
 		{"ID", t.ShortID(), t.ID},
@@ -225,13 +246,43 @@ func (t Task) Describe() {
 		{"Completed", completed, fmt.Sprintf("%+v", t.Completed)},
 		{"Due", due, fmt.Sprintf("%+v", t.Due)},
 		{"Effort/Impact", EffortImpactText(int(t.EffortImpact)), fmt.Sprintf("%+v", t.EffortImpact)},
+		{"Parents", parentsBuff.String(), fmt.Sprintf("%+v", t.Parents)},
+		{"Children", childrenBuff.String(), fmt.Sprintf("%+v", t.Children)},
 	}
 
 	pterm.DefaultTable.WithHasHeader().WithData(data).Render()
+	return nil
 }
 
 type TaskServiceOp struct {
 	localClient *LocalClient
+}
+
+func (svc *TaskServiceOp) GetByPartialID(partialID string) (*Task, error) {
+	prefixes := []string{"/active", "/completed"}
+	matches := []string{}
+	for _, prefix := range prefixes {
+		ids, err := svc.GetIDsByPrefix(prefix)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			if strings.HasPrefix(id, fmt.Sprintf("%v/%v", prefix, partialID)) {
+				matches = append(matches, id)
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("No matches for %v found in %v", partialID, prefixes)
+	} else if len(matches) > 1 {
+		return nil, fmt.Errorf(
+			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
+	}
+	t, err := svc.GetByExactPath(matches[0])
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 func (svc *TaskServiceOp) GetByPartialIDWithPath(partialID string, prefix string) (*Task, error) {

@@ -193,6 +193,13 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 		}
 	}
 
+	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
+	if !t.HideUntil.IsZero() && !t.Due.IsZero() {
+		if t.HideUntil.After(t.Due) {
+			return fmt.Errorf("HideUntil cannot be later than Due")
+		}
+	}
+
 	// Make sure we didn't add ourself
 	if ContainsString(t.Parents, t.ID) {
 		return fmt.Errorf("Self id is set in the parents, we don't do that")
@@ -220,6 +227,7 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 	//data := make([][]string, 0)
 	now := time.Now()
 	due := HumanizeDuration(t.Due.Sub(now))
+	wait := HumanizeDuration(t.HideUntil.Sub(now))
 	added := HumanizeDuration(t.Added.Sub(now))
 	completed := HumanizeDuration(t.Completed.Sub(now))
 	var parentsBuff bytes.Buffer
@@ -245,6 +253,7 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 		{"Added", added, fmt.Sprintf("%+v", t.Added)},
 		{"Completed", completed, fmt.Sprintf("%+v", t.Completed)},
 		{"Due", due, fmt.Sprintf("%+v", t.Due)},
+		{"Wait", wait, fmt.Sprintf("%+v", t.HideUntil)},
 		{"Effort/Impact", EffortImpactText(int(t.EffortImpact)), fmt.Sprintf("%+v", t.EffortImpact)},
 		{"Parents", parentsBuff.String(), fmt.Sprintf("%+v", t.Parents)},
 		{"Children", childrenBuff.String(), fmt.Sprintf("%+v", t.Children)},

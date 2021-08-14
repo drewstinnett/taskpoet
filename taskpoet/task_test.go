@@ -481,3 +481,20 @@ func TestDescribe(t *testing.T) {
 	lc.Task.Describe(taskP)
 
 }
+
+func TestHideAfterDue(t *testing.T) {
+	now := time.Now()
+	sooner := now.Add(time.Minute * 5)
+	later := now.Add(time.Minute * 10)
+	ts := &taskpoet.Task{
+		ID:          "test-hide-after-due",
+		Description: "test-hide-after-due",
+		HideUntil:   later,
+		Due:         sooner,
+	}
+	_, err := lc.Task.Add(ts, nil)
+
+	if err == nil {
+		t.Error("Adding a task with hideuntil later than due did not produce an error")
+	}
+}

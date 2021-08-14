@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -14,6 +17,7 @@ import (
 
 var cfgFile string
 var localClient *taskpoet.LocalClient
+var Verbose bool
 var dbConfig *taskpoet.DBConfig
 var taskDefaults *taskpoet.Task
 
@@ -36,12 +40,30 @@ Effort/Impact Assessment, based on Limoncelli concept
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if Verbose {
+			log.SetLevel(log.DebugLevel)
+		}
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	cobra.CheckErr(rootCmd.Execute())
+
+	cmd, _, err := rootCmd.Find(os.Args[1:])
+	// default cmd if no cmd is given
+	if err == nil && cmd.Use == rootCmd.Use && cmd.Flags().Parse(os.Args[1:]) != pflag.ErrHelp {
+		args := append([]string{"active"}, os.Args[1:]...)
+		rootCmd.SetArgs(args)
+	}
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	//cobra.CheckErr(rootCmd.Execute())
 }
 
 func init() {
@@ -52,6 +74,7 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
+	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "Verbose logging")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

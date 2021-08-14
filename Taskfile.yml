@@ -17,3 +17,7 @@ tasks:
   cover:
     cmds:
       - go test -coverprofile=/tmp/gocover $(go list ./... | grep -v example) && go tool cover -html=/tmp/gocover
+  install:
+    cmds:
+      - go build -o /tmp/taskpoet ./cli/
+      - mv /tmp/taskpoet ~/bin/

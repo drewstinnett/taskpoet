@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/dustin/go-humanize"
@@ -20,6 +21,8 @@ var getActiveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var results []taskpoet.Task
 		var err error
+
+		now := time.Now()
 		results, err = localClient.Task.List("/active")
 		CheckErr(err)
 		sort.Slice(results, func(i, j int) bool {
@@ -29,12 +32,11 @@ var getActiveCmd = &cobra.Command{
 		data := make([][]string, 0)
 		data = append(data, []string{"ID", "Age", "Description", "Due"})
 		for _, task := range results {
-			//duration := task.Due.Sub(now)
-			age := humanize.Time(task.Added)
-			//hrDuration := durafmt.Parse(duration).LimitFirstN(1) // // limit first two parts.
-
-			row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, humanize.Time(task.Due)}
-			data = append(data, row)
+			if task.HideUntil.Before(now) {
+				age := humanize.Time(task.Added)
+				row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, humanize.Time(task.Due)}
+				data = append(data, row)
+			}
 		}
 		pterm.DefaultTable.WithHasHeader().WithData(data).Render()
 	},

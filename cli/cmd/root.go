@@ -16,6 +16,7 @@ import (
 )
 
 var cfgFile string
+var namespace string
 var localClient *taskpoet.LocalClient
 var Verbose bool
 var dbConfig *taskpoet.DBConfig
@@ -74,6 +75,7 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "Verbose logging")
 
 	// Cobra also supports local flags, which will only run
@@ -105,7 +107,7 @@ func initConfig() {
 	}
 	// Configuration for DB
 	dbPath := viper.GetString("dbpath")
-	dbConfig = &taskpoet.DBConfig{Path: dbPath}
+	dbConfig = &taskpoet.DBConfig{Path: dbPath, Namespace: namespace}
 	log.Debug("Using DB at: ", dbPath)
 
 	err = taskpoet.InitDB(dbConfig)

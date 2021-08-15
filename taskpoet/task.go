@@ -37,6 +37,8 @@ type TaskService interface {
 	Add(t, d *Task) (*Task, error)
 	AddSet(t []Task, d *Task) error
 
+	BucketName() string
+
 	// Helper for adding Parent
 	AddParent(c, p *Task) error
 	AddChild(p, c *Task) error
@@ -62,6 +64,10 @@ type TaskService interface {
 	GetByPartialID(partialID string) (*Task, error)
 	GetByPartialIDWithPath(partialID string, prefix string) (*Task, error)
 	GetIDsByPrefix(prefix string) ([]string, error)
+}
+
+func (svc *TaskServiceOp) BucketName() string {
+	return fmt.Sprintf("/%v/tasks", svc.localClient.Namespace)
 }
 
 func (svc *TaskServiceOp) AddParent(c, p *Task) error {
@@ -126,7 +132,7 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 			if err != nil {
 				return err
 			}
-			b := tx.Bucket([]byte("tasks"))
+			b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 			err = b.Put(t.DetectKeyPath(), taskSerial)
 			if err != nil {
 				return err
@@ -164,7 +170,7 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 	}
 
 	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err = b.Put(t.DetectKeyPath(), taskSerial)
 		if err != nil {
 			return err
@@ -321,7 +327,7 @@ func (svc *TaskServiceOp) GetByPartialIDWithPath(partialID string, prefix string
 func (svc *TaskServiceOp) GetByExactPath(path string) (*Task, error) {
 	var task Task
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		taskBytes := b.Get([]byte(fmt.Sprintf("%s", path)))
 		if taskBytes == nil {
 			return fmt.Errorf("Could not find task: %s", path)
@@ -367,7 +373,7 @@ func (svc *TaskServiceOp) GetByIDWithPrefix(id string, prefix string) (*Task, er
 
 	var task Task
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		taskBytes := b.Get([]byte(fmt.Sprintf("%s/%s", realPrefix, id)))
 		if taskBytes == nil {
 			return fmt.Errorf("Could not find task: %s/%s", realPrefix, id)
@@ -390,7 +396,7 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 	now := time.Now()
 	t.Completed = now
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		taskSerial, err := json.Marshal(t)
 		if err != nil {
 			return err
@@ -413,7 +419,7 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 func (svc *TaskServiceOp) List(prefix string) ([]Task, error) {
 	var tasks []Task
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err := b.ForEach(func(k, v []byte) error {
 			var task Task
 			err := json.Unmarshal(v, &task)
@@ -493,7 +499,7 @@ func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
 
 	keyPath := t.DetectKeyPath()
 	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("tasks"))
+		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err = bucket.Put(keyPath, taskSerial)
 		if err != nil {
 			return err
@@ -540,7 +546,7 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 		keyPath = fmt.Sprintf("/completed/%s", t.ID)
 	}
 	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("tasks"))
+		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err = bucket.Put([]byte(keyPath), taskSerial)
 		if err != nil {
 			return err
@@ -556,7 +562,7 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	allIDs := []string{}
 
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("tasks"))
+		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err := bucket.ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				allIDs = append(allIDs, string(k))

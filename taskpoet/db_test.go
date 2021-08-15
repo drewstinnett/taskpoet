@@ -25,7 +25,7 @@ func TestInitDB(t *testing.T) {
 		t.Error("Could not get db we just created: ", err)
 	}
 	err = localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("tasks"))
+		bucket := tx.Bucket([]byte(localClient.Task.BucketName()))
 		if bucket == nil {
 			t.Error("Could not get the task bucket on the new db")
 		}

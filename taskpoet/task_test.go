@@ -8,12 +8,16 @@ import (
 	"time"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/assert/v2"
+	"github.com/pterm/pterm"
 	bolt "go.etcd.io/bbolt"
 )
 
 // Local Client for lookups
 var lc *taskpoet.LocalClient
 var emptyDefaults taskpoet.Task
+var router *gin.Engine
 
 func setup() {
 	// Init a db
@@ -22,6 +26,13 @@ func setup() {
 	_ = taskpoet.InitDB(dbConfig)
 	lc, _ = taskpoet.NewLocalClient(dbConfig)
 	emptyDefaults = taskpoet.Task{}
+
+	// Init Router
+	rc := &taskpoet.RouterConfig{
+		LocalClient: lc,
+	}
+	router = taskpoet.NewRouter(rc)
+	//router = taskpoet.NewRouter(nil)
 
 	// Populate with some various tasks to filter on
 }
@@ -61,7 +72,7 @@ func TestCompleteTask(t *testing.T) {
 
 	// Now make sure we actually did something
 	err = lc.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("tasks"))
+		b := tx.Bucket([]byte(lc.Task.BucketName()))
 		old := b.Get([]byte(fmt.Sprintf("/active/%s", task.ID)))
 		if old != nil {
 			t.Errorf("When completing a task, the /active id is not removed")
@@ -455,6 +466,7 @@ func TestGetByPartialID(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
+	pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
 	ts := []taskpoet.Task{
 		{Description: "foo", ID: "describe-test"},
 		{Description: "Some parent", ID: "describe-parent"},
@@ -497,4 +509,9 @@ func TestHideAfterDue(t *testing.T) {
 	if err == nil {
 		t.Error("Adding a task with hideuntil later than due did not produce an error")
 	}
+}
+
+func TestDefaultBucketName(t *testing.T) {
+	n := lc.Task.BucketName()
+	assert.Equal(t, n, "/default/tasks")
 }

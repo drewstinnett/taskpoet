@@ -8,12 +8,14 @@ import (
 )
 
 type DBConfig struct {
-	Path string
+	Path      string
+	Namespace string
 }
 
 type LocalClient struct {
-	DB   *bolt.DB
-	Task TaskService
+	DB        *bolt.DB
+	Namespace string
+	Task      TaskService
 }
 
 func NewLocalClient(c *DBConfig) (*LocalClient, error) {
@@ -26,6 +28,13 @@ func NewLocalClient(c *DBConfig) (*LocalClient, error) {
 		dbPath = c.Path
 	}
 
+	var namespace string
+	if c.Namespace == "" {
+		namespace = "default"
+	} else {
+		namespace = c.Namespace
+	}
+
 	// Make a full path
 	db, err := bolt.Open(dbPath, 0600, nil)
 	//defer db.Close()
@@ -33,9 +42,12 @@ func NewLocalClient(c *DBConfig) (*LocalClient, error) {
 		return nil, err
 	}
 	lc := LocalClient{
-		DB: db,
+		DB:        db,
+		Namespace: namespace,
 	}
-	lc.Task = &TaskServiceOp{localClient: &lc}
+	lc.Task = &TaskServiceOp{
+		localClient: &lc,
+	}
 	// New database is here
 	return &lc, nil
 
@@ -49,9 +61,10 @@ func InitDB(c *DBConfig) error {
 
 	// store some data
 	err = localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("tasks"))
+		//localClient.
+		bucket := tx.Bucket([]byte(localClient.Task.BucketName()))
 		if bucket == nil {
-			_, err := tx.CreateBucket([]byte("tasks"))
+			_, err := tx.CreateBucket([]byte(localClient.Task.BucketName()))
 			if err != nil {
 				return err
 			}

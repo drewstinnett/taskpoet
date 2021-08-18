@@ -1,0 +1,96 @@
+openapi: 3.0.2
+info:
+  title: TaskPoet OpenAPI Spec
+  description: |
+    Do some cool stuff with the openapi spec
+  contact:
+    email: drew@drewlink.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+- url: http://localhost:8080/v1
+paths:
+  /active:
+    get:
+      summary: Get all Tasks
+      tags:
+        - tasks
+      parameters:
+        - name: limit
+          in: query
+          description: Limit to N results
+          required: false
+          schema:
+            type: integer
+            format: uint64
+        - name: page
+          in: query
+          description: Page of results
+          required: false
+          schema:
+            type: integer
+            format: uint64
+        - name: sort
+          in: query
+          description: Sort results by
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveResponse'
+components:
+  schemas:
+    Task:
+      type: object
+      properties:
+        id: 
+          type: string
+        description: 
+          type: string
+        due: 
+          type: string
+          format: date-time
+        hide_until: 
+          type: string
+          format: date-time
+        completed: 
+          type: string
+          format: date-time
+        added: 
+          type: string
+          format: date-time
+        effort_impact: 
+          type: integer
+          format: int32
+    Pagination:
+      type: object
+      properties: 
+        limit: 
+          default: 10
+          type: integer
+          format: int32
+        page: 
+          default: 1
+          type: integer
+          format: int32
+        sort: 
+          type: string
+          default: description
+        hasmore: 
+          type: boolean
+    ActiveResponse:
+      type: object
+      properties:
+        pagination: 
+          $ref: '#/components/schemas/Pagination'
+        data: 
+          type: array
+          items: 
+            $ref: '#/components/schemas/Task'

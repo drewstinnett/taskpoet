@@ -59,10 +59,12 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 
 		// Did we specify a due date?
 		if float64(due.Nanoseconds()) != float64(0) {
-			t.Due = now.Add(due)
+			d := now.Add(due)
+			t.Due = &d
 		}
 		if wait.Nanoseconds() != 0 {
-			t.HideUntil = now.Add(wait)
+			h := now.Add(wait)
+			t.HideUntil = &h
 		}
 
 		found, err := localClient.Task.Add(t, taskDefaults)

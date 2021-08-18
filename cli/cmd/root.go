@@ -124,7 +124,7 @@ func initConfig() {
 		dueDuration, err := taskpoet.ParseDuration(defaultDue)
 		CheckErr(err)
 		due := now.Add(dueDuration)
-		taskDefaults.Due = due
+		taskDefaults.Due = &due
 	}
 }
 

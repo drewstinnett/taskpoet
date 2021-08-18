@@ -137,11 +137,11 @@ func TestDefaults(t *testing.T) {
 	now := time.Now()
 	fakeDuration, _ := taskpoet.ParseDuration("2h")
 	duration := now.Add(fakeDuration)
-	defaults.Due = duration
+	defaults.Due = &duration
 
 	task, _ := lc.Task.Add(&taskpoet.Task{Description: "foo"}, &defaults)
 
-	if task.Due != duration {
+	if task.Due != &duration {
 		t.Error("Default setting of Due did not work")
 	}
 
@@ -320,7 +320,8 @@ func TestEditCompletedInvalid(t *testing.T) {
 		t.Error(err)
 	}
 
-	task.Completed = time.Now()
+	n := time.Now()
+	task.Completed = &n
 	_, err = lc.Task.Edit(task)
 	if err == nil {
 		t.Error("Did not error when editing a task and changing the Completed field")
@@ -501,13 +502,13 @@ func TestHideAfterDue(t *testing.T) {
 	ts := &taskpoet.Task{
 		ID:          "test-hide-after-due",
 		Description: "test-hide-after-due",
-		HideUntil:   later,
-		Due:         sooner,
+		HideUntil:   &later,
+		Due:         &sooner,
 	}
 	_, err := lc.Task.Add(ts, nil)
 
 	if err == nil {
-		t.Error("Adding a task with hideuntil later than due did not produce an error")
+		t.Error("Adding a task with hideuntil later than due did not produce an error", sooner, later)
 	}
 }
 

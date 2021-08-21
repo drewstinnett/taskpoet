@@ -493,6 +493,19 @@ func TestDescribe(t *testing.T) {
 
 	lc.Task.Describe(taskP)
 
+	// Describe a task with more things set
+	n := time.Now()
+	wait := n.Add(time.Hour * 1)
+	due := n.Add(time.Hour * 24)
+	completed := n.Add(time.Hour * 12)
+	lc.Task.Describe(&taskpoet.Task{
+		ID:          "describe-descriptive",
+		Description: "foo",
+		Due:         &due,
+		HideUntil:   &wait,
+		Completed:   &completed,
+	})
+
 }
 
 func TestHideAfterDue(t *testing.T) {
@@ -515,4 +528,27 @@ func TestHideAfterDue(t *testing.T) {
 func TestDefaultBucketName(t *testing.T) {
 	n := lc.Task.BucketName()
 	assert.Equal(t, n, "/default/tasks")
+}
+
+func TestDeleteTask(t *testing.T) {
+	ts := &taskpoet.Task{
+		ID:          "delete-me",
+		Description: "foo",
+	}
+	added, err := lc.Task.Add(ts, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Delete it now
+	err = lc.Task.Delete(added)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = lc.Task.GetByID("delete-me")
+	if err == nil {
+		t.Error("Got task we should have deleted")
+	}
+
 }

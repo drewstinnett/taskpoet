@@ -55,7 +55,13 @@ var getCmd = &cobra.Command{
 				continue
 			}
 			age := humanize.Time(task.Added)
-			row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, humanize.Time(*task.Due)}
+			var dueHR string
+			if task.Due != nil {
+				dueHR = humanize.Time(*task.Due)
+			} else {
+				dueHR = ""
+			}
+			row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, dueHR}
 			data = append(data, row)
 		}
 		page := make([][]string, 0)

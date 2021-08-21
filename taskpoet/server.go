@@ -7,7 +7,6 @@ import (
 	"path"
 	"strconv"
 
-	. "github.com/ahmetb/go-linq/v3"
 	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +15,13 @@ import (
 
 //go:embed static/*
 var apiDir embed.FS
+
+type Pagination struct {
+	Limit   uint   `json:"limit"`
+	Page    uint   `json:"page"`
+	Sort    string `json:"sort"`
+	HasMore bool   `json:"hasmore"`
+}
 
 type RouterConfig struct {
 	Debug       bool
@@ -40,18 +46,22 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	// TODO: Explore what this should actually be
-	if gin.Mode() == "default" {
+	if gin.Mode() == "debug" {
 		r.Use(cors.Default())
 	}
 
 	apiV1 := r.Group("/v1")
 
 	apiV1.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
+		c.JSON(200, gin.H{"message": "pong"})
 	})
-	apiV1.GET("/active", APIActive)
+	//apiV1.GET("/active", TaskAPIListActive)
+	//apiV1.GET("/completed", TaskAPIListCompleted)
+	apiV1.GET("/tasks", TaskAPIList)
+	apiV1.POST("/tasks", TaskAPIAdd)
+	apiV1.GET("/tasks/:id", TaskAPIGet)
+	apiV1.PUT("/tasks/:id", TaskAPIEdit)
+	apiV1.DELETE("/tasks/:id", TaskAPIDelete)
 
 	// Swagger/OpenAPI Stuff
 	//url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
@@ -64,42 +74,6 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 		c.FileFromFS(p, http.FS(apiDir))
 	})
 	return r
-}
-
-func APIActive(c *gin.Context) {
-	client, ok := c.Keys["client"].(LocalClient)
-	if !ok {
-		c.JSON(500, map[string]string{
-			"message": "Could not look up LocalClient in context",
-		})
-	}
-	tasks, err := client.Task.List("/active")
-	if err != nil {
-		c.JSON(500, map[string]string{
-			"message": fmt.Sprintf("%+v", err),
-		})
-	}
-
-	// Do some calculations
-	totalTasks := len(tasks)
-
-	pagination := GeneratePaginationFromRequest(c)
-	var pageData []Task
-	skip := int(pagination.Limit * (pagination.Page - 1))
-	From(tasks).Skip(skip).Take(int(pagination.Limit)).ToSlice(&pageData)
-	currentMaxTask := skip + len(pageData)
-
-	if currentMaxTask < totalTasks {
-		pagination.HasMore = true
-	} else {
-		pagination.HasMore = false
-	}
-
-	c.JSON(200, APITaskResponse{
-		Data:       pageData,
-		Pagination: pagination,
-	})
-
 }
 
 func APIClient(client *LocalClient) gin.HandlerFunc {
@@ -138,14 +112,24 @@ func GeneratePaginationFromRequest(c *gin.Context) Pagination {
 
 }
 
-type Pagination struct {
-	Limit   uint   `json:"limit"`
-	Page    uint   `json:"page"`
-	Sort    string `json:"sort"`
-	HasMore bool   `json:"hasmore"`
+func GetBoolParam(c *gin.Context, paramName string, paramDefault bool) (bool, error) {
+
+	paramGot := c.Query(paramName)
+	// If nothing, just use the default
+	if paramGot == "" {
+		return paramDefault, nil
+	}
+	paramBool, err := strconv.ParseBool(paramGot)
+	if err != nil {
+		return false, err
+	} else {
+		return paramBool, nil
+	}
+
 }
 
-type APITaskResponse struct {
-	Pagination Pagination `json:"pagination"`
-	Data       []Task     `json:"data"`
+func CheckAPIErr(c *gin.Context, err error) {
+	if err != nil {
+		c.AbortWithStatusJSON(500, map[string]string{"message": fmt.Sprintf("%+v", err)})
+	}
 }

@@ -50,6 +50,9 @@ type TaskService interface {
 	Edit(t *Task) (*Task, error)
 	EditSet(t []Task) error
 
+	// Delete
+	Delete(t *Task) error
+
 	// Check to ensure Task is in a valid state
 	Validate(t *Task, o *TaskValidateOpts) error
 
@@ -144,6 +147,24 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (svc *TaskServiceOp) Delete(t *Task) error {
+	originalTask, err := svc.GetByID(t.ID)
+	if err != nil {
+		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
+	}
+
+	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+		err = b.Delete(originalTask.DetectKeyPath())
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	return nil
 }

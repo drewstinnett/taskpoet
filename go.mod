@@ -3,7 +3,10 @@ module github.com/drewstinnett/taskpoet
 go 1.16
 
 require (
+	github.com/ahmetb/go-linq/v3 v3.2.0
+	github.com/bxcodec/faker v2.0.1+incompatible
 	github.com/dustin/go-humanize v1.0.0
+	github.com/gin-contrib/cors v1.3.1
 	github.com/gin-gonic/gin v1.7.3
 	github.com/go-playground/assert/v2 v2.0.1
 	github.com/google/uuid v1.3.0

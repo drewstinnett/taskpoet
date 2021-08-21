@@ -18,9 +18,10 @@ var logCmd = &cobra.Command{
 actual TODO list`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("log called")
+		now := time.Now()
 		t := &taskpoet.Task{
 			Description: args[0],
-			Completed:   time.Now(),
+			Completed:   &now,
 		}
 		found, err := localClient.Task.Add(t, taskDefaults)
 		CheckErr(err)

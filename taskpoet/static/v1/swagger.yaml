@@ -1,0 +1,208 @@
+openapi: 3.0.2
+info:
+  title: TaskPoet OpenAPI Spec
+  description: |
+    Do some cool stuff with the openapi spec
+  contact:
+    email: drew@drewlink.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+- url: http://localhost:8080/v1
+paths:
+  /tasks/{id}:
+    get:
+      tags:
+      - task
+      summary: Find Task by ID
+      description: Returns a single Task
+      parameters:
+      - name: id
+        in: path
+        description: ID of Task to return
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        "404":
+          description: Task not found
+    put:
+      tags:
+      - task
+      summary: Edit a Task by ID
+      description: Returns a single edited Task
+      parameters:
+      - name: id
+        in: path
+        description: ID of Task to return
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: Update a Task
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Task'
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        "404":
+          description: Task not found
+    delete:
+      tags:
+      - task
+      summary: Delete a Task by ID
+      description: Delete a Task
+      parameters:
+      - name: id
+        in: path
+        description: ID of Task to delete
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: successful operation
+          content: {}
+        "404":
+          description: Task not found
+  /tasks:
+    get:
+      summary: Get Tasks
+      tags:
+        - task
+      parameters:
+        - name: limit
+          in: query
+          description: Limit to N results
+          required: false
+          schema:
+            type: integer
+            format: uint64
+        - name: page
+          in: query
+          description: Page of results
+          required: false
+          schema:
+            type: integer
+            format: uint64
+        - name: sort
+          in: query
+          description: Sort results by (Doesn't actually work yet)
+          required: false
+          schema:
+            type: string
+        - name: include_completed
+          in: query
+          description: "Include completed tasks (Default: false)"
+          schema:
+            type: boolean
+        - name: include_active
+          in: query
+          description: "Include active tasks (Default: true)"
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+    post:
+      summary: Create new Tasks
+      tags:
+        - task
+      requestBody:
+        description: Create a new pet in the store
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/Task'
+                - $ref: '#/components/schemas/Tasks'
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json: {}
+#             schema:
+#               $ref: '#/components/schemas/TaskListResponse'
+components:
+  schemas:
+    Tasks:
+      type: array
+      items: 
+        $ref: '#/components/schemas/Task'
+    Task:
+      type: object
+      properties:
+        id: 
+          type: string
+        description: 
+          type: string
+        due: 
+          type: string
+          format: date-time
+          nullable: true
+        hide_until: 
+          type: string
+          format: date-time
+          nullable: true
+        completed: 
+          type: string
+          format: date-time
+          nullable: true
+        added: 
+          type: string
+          format: date-time
+        effort_impact: 
+          type: integer
+          format: int32
+        children: 
+          type: array
+          items: 
+            type: string
+        parents: 
+          type: array
+          items: 
+            type: string
+    Pagination:
+      type: object
+      properties: 
+        limit: 
+          default: 10
+          type: integer
+          format: int32
+        page: 
+          default: 1
+          type: integer
+          format: int32
+        sort: 
+          type: string
+          default: description
+        hasmore: 
+          type: boolean
+    TaskListResponse:
+      type: object
+      properties:
+        pagination: 
+          $ref: '#/components/schemas/Pagination'
+        data: 
+          nullable: true
+          type: array
+          items: 
+            $ref: '#/components/schemas/Task'

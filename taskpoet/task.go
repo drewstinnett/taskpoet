@@ -17,15 +17,15 @@ import (
 var prefixes []string
 
 type Task struct {
-	ID           string    `json:"id"`
-	Description  string    `json:"description"`
-	Due          time.Time `json:"due,omitempty"`
-	HideUntil    time.Time `json:"hide_until,omitempty"`
-	Completed    time.Time `json:"completed,omitempty"`
-	Added        time.Time `json:"added,omitempty"`
-	EffortImpact uint      `json:"effort_impact,omitempty"`
-	Children     []string  `json:"children,omitempty"`
-	Parents      []string  `json:"parents,omitempty"`
+	ID           string     `json:"id"`
+	Description  string     `json:"description"`
+	Due          *time.Time `json:"due,omitempty"`
+	HideUntil    *time.Time `json:"hide_until,omitempty"`
+	Completed    *time.Time `json:"completed,omitempty"`
+	Added        time.Time  `json:"added,omitempty"`
+	EffortImpact uint       `json:"effort_impact"`
+	Children     []string   `json:"children,omitempty"`
+	Parents      []string   `json:"parents,omitempty"`
 }
 
 type TaskValidateOpts struct {
@@ -49,6 +49,9 @@ type TaskService interface {
 	// Edit a Task entry
 	Edit(t *Task) (*Task, error)
 	EditSet(t []Task) error
+
+	// Delete
+	Delete(t *Task) error
 
 	// Check to ensure Task is in a valid state
 	Validate(t *Task, o *TaskValidateOpts) error
@@ -99,7 +102,7 @@ func (svc *TaskServiceOp) AddChild(p, c *Task) error {
 func (t *Task) DetectKeyPath() []byte {
 	// Is this a new active task, or just logging completed?
 	var keyPath string
-	if t.Completed.IsZero() {
+	if t.Completed == nil {
 		keyPath = fmt.Sprintf("/active/%s", t.ID)
 	} else {
 		keyPath = fmt.Sprintf("/completed/%s", t.ID)
@@ -144,6 +147,24 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (svc *TaskServiceOp) Delete(t *Task) error {
+	originalTask, err := svc.GetByID(t.ID)
+	if err != nil {
+		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
+	}
+
+	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+		err = b.Delete(originalTask.DetectKeyPath())
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	return nil
 }
@@ -200,8 +221,8 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 	}
 
 	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
-	if !t.HideUntil.IsZero() && !t.Due.IsZero() {
-		if t.HideUntil.After(t.Due) {
+	if t.HideUntil != nil && t.Due != nil {
+		if t.HideUntil.After(*t.Due) {
 			return fmt.Errorf("HideUntil cannot be later than Due")
 		}
 	}
@@ -232,10 +253,25 @@ func (t *Task) ShortID() string {
 func (svc *TaskServiceOp) Describe(t *Task) error {
 	//data := make([][]string, 0)
 	now := time.Now()
-	due := HumanizeDuration(t.Due.Sub(now))
-	wait := HumanizeDuration(t.HideUntil.Sub(now))
+	var due string
+	var wait string
+	var completed string
+	if t.Due == nil {
+		due = "-"
+	} else {
+		due = HumanizeDuration(t.Due.Sub(now))
+	}
+	if t.HideUntil == nil {
+		wait = "-"
+	} else {
+		wait = HumanizeDuration(t.HideUntil.Sub(now))
+	}
 	added := HumanizeDuration(t.Added.Sub(now))
-	completed := HumanizeDuration(t.Completed.Sub(now))
+	if t.Completed == nil {
+		completed = "-"
+	} else {
+		completed = HumanizeDuration(t.Completed.Sub(now))
+	}
 	var parentsBuff bytes.Buffer
 	var childrenBuff bytes.Buffer
 	for _, p := range t.Parents {
@@ -394,7 +430,7 @@ func (svc *TaskServiceOp) GetByIDWithPrefix(id string, prefix string) (*Task, er
 
 func (svc *TaskServiceOp) Complete(t *Task) error {
 	now := time.Now()
-	t.Completed = now
+	t.Completed = &now
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		taskSerial, err := json.Marshal(t)
@@ -445,8 +481,9 @@ func (svc *TaskServiceOp) List(prefix string) ([]Task, error) {
 
 // Shortcut utility to add a new task, but a completed time of 'now'
 func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
-	if t.Completed.IsZero() {
-		t.Completed = time.Now()
+	if t.Completed == nil {
+		n := time.Now()
+		t.Completed = &n
 	}
 	ret, err := svc.Add(t, d)
 	if err != nil {
@@ -478,7 +515,7 @@ func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
 
 	// Handle defaults due
 	if d != nil {
-		if t.Due.IsZero() && !d.Due.IsZero() {
+		if t.Due == nil && d.Due != nil {
 			t.Due = d.Due
 		}
 	}
@@ -529,7 +566,7 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 
 	// Handle defaults due
 	if d != nil {
-		if t.Due.IsZero() && !d.Due.IsZero() {
+		if t.Due == nil && d.Due != nil {
 			t.Due = d.Due
 		}
 	}
@@ -540,7 +577,7 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 
 	// Is this a new active task, or just logging completed?
 	var keyPath string
-	if t.Completed.IsZero() {
+	if t.Completed == nil {
 		keyPath = fmt.Sprintf("/active/%s", t.ID)
 	} else {
 		keyPath = fmt.Sprintf("/completed/%s", t.ID)

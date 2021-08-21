@@ -137,11 +137,11 @@ func TestDefaults(t *testing.T) {
 	now := time.Now()
 	fakeDuration, _ := taskpoet.ParseDuration("2h")
 	duration := now.Add(fakeDuration)
-	defaults.Due = duration
+	defaults.Due = &duration
 
 	task, _ := lc.Task.Add(&taskpoet.Task{Description: "foo"}, &defaults)
 
-	if task.Due != duration {
+	if task.Due != &duration {
 		t.Error("Default setting of Due did not work")
 	}
 
@@ -320,7 +320,8 @@ func TestEditCompletedInvalid(t *testing.T) {
 		t.Error(err)
 	}
 
-	task.Completed = time.Now()
+	n := time.Now()
+	task.Completed = &n
 	_, err = lc.Task.Edit(task)
 	if err == nil {
 		t.Error("Did not error when editing a task and changing the Completed field")
@@ -492,6 +493,19 @@ func TestDescribe(t *testing.T) {
 
 	lc.Task.Describe(taskP)
 
+	// Describe a task with more things set
+	n := time.Now()
+	wait := n.Add(time.Hour * 1)
+	due := n.Add(time.Hour * 24)
+	completed := n.Add(time.Hour * 12)
+	lc.Task.Describe(&taskpoet.Task{
+		ID:          "describe-descriptive",
+		Description: "foo",
+		Due:         &due,
+		HideUntil:   &wait,
+		Completed:   &completed,
+	})
+
 }
 
 func TestHideAfterDue(t *testing.T) {
@@ -501,17 +515,40 @@ func TestHideAfterDue(t *testing.T) {
 	ts := &taskpoet.Task{
 		ID:          "test-hide-after-due",
 		Description: "test-hide-after-due",
-		HideUntil:   later,
-		Due:         sooner,
+		HideUntil:   &later,
+		Due:         &sooner,
 	}
 	_, err := lc.Task.Add(ts, nil)
 
 	if err == nil {
-		t.Error("Adding a task with hideuntil later than due did not produce an error")
+		t.Error("Adding a task with hideuntil later than due did not produce an error", sooner, later)
 	}
 }
 
 func TestDefaultBucketName(t *testing.T) {
 	n := lc.Task.BucketName()
 	assert.Equal(t, n, "/default/tasks")
+}
+
+func TestDeleteTask(t *testing.T) {
+	ts := &taskpoet.Task{
+		ID:          "delete-me",
+		Description: "foo",
+	}
+	added, err := lc.Task.Add(ts, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Delete it now
+	err = lc.Task.Delete(added)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = lc.Task.GetByID("delete-me")
+	if err == nil {
+		t.Error("Got task we should have deleted")
+	}
+
 }

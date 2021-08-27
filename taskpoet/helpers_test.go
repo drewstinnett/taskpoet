@@ -7,6 +7,7 @@ import (
 )
 
 func TestParseDuration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		duration string
 		seconds  float64
@@ -31,6 +32,7 @@ func TestParseDuration(t *testing.T) {
 }
 
 func TestParseInvalidDuration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		duration string
 	}{
@@ -51,6 +53,7 @@ func TestParseInvalidDuration(t *testing.T) {
 }
 
 func TestUniqueSlices(t *testing.T) {
+	t.Parallel()
 	nodups := []string{"a", "b", "c"}
 	dups := []string{"c", "b", "c"}
 

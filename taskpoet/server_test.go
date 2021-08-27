@@ -9,6 +9,7 @@ import (
 )
 
 func TestPingRoute(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v1/ping", nil)
 	router.ServeHTTP(w, req)
@@ -18,6 +19,7 @@ func TestPingRoute(t *testing.T) {
 }
 
 func TestSwaggerFile(t *testing.T) {
+	t.Parallel()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/static/v1/swagger.yaml", nil)
 	router.ServeHTTP(w, req)

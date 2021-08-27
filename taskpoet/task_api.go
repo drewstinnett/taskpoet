@@ -111,7 +111,7 @@ func TaskAPIGet(c *gin.Context) {
 	client, _ := c.Keys["client"].(LocalClient)
 
 	id := c.Param("id")
-	task, err := client.Task.GetByID(id)
+	task, err := client.Task.GetWithID(id, "", "")
 	if err != nil {
 		c.JSON(404, map[string]string{
 			"message": fmt.Sprintf("Could not find ID with id: %v", id),
@@ -127,7 +127,7 @@ func TaskAPIEdit(c *gin.Context) {
 	client, _ := c.Keys["client"].(LocalClient)
 
 	id := c.Param("id")
-	_, err := client.Task.GetByID(id)
+	_, err := client.Task.GetWithID(id, "", "")
 	if err != nil {
 		c.JSON(404, map[string]string{
 			"message": fmt.Sprintf("Could not find ID with id: %v", id),
@@ -152,7 +152,7 @@ func TaskAPIDelete(c *gin.Context) {
 	client, _ := c.Keys["client"].(LocalClient)
 
 	id := c.Param("id")
-	task, err := client.Task.GetByID(id)
+	task, err := client.Task.GetWithID(id, "", "")
 	if err != nil {
 		c.JSON(404, map[string]string{
 			"message": fmt.Sprintf("Could not find ID with id: %v", id),

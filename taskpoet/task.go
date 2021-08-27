@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,10 +15,13 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+const ()
+
 var prefixes []string
 
 type Task struct {
 	ID           string     `json:"id"`
+	PluginID     string     `json:"plugin_id"`
 	Description  string     `json:"description"`
 	Due          *time.Time `json:"due,omitempty"`
 	HideUntil    *time.Time `json:"hide_until,omitempty"`
@@ -26,6 +30,58 @@ type Task struct {
 	EffortImpact uint       `json:"effort_impact"`
 	Children     []string   `json:"children,omitempty"`
 	Parents      []string   `json:"parents,omitempty"`
+}
+
+func (t *Task) DetectKeyPath() []byte {
+	// Is this a new active task, or just logging completed?
+	var keyPath string
+	var pluginID string
+	if t.PluginID == "" {
+		pluginID = "builtin"
+	} else {
+		pluginID = t.PluginID
+	}
+	if t.Completed == nil {
+		// keyPath = fmt.Sprintf("/active/%s", t.ID)
+		keyPath = filepath.Join("/active", pluginID, t.ID)
+	} else {
+		keyPath = filepath.Join("/completed", pluginID, t.ID)
+		//keyPath = fmt.Sprintf("/completed/%s", t.ID)
+	}
+	return []byte(keyPath)
+
+}
+
+func (t *Task) SetDefaults(d *Task) {
+	now := time.Now()
+	if t.Added.IsZero() {
+		t.Added = now
+	}
+
+	// If no ID is set, just generate one
+	if t.ID == "" {
+		t.ID = fmt.Sprintf(uuid.New().String())
+	}
+
+	// Set the plugin id to default if not set
+	if t.PluginID == "" {
+		t.PluginID = "builtin"
+	}
+	// Handle defaults due
+	if d != nil {
+		if t.Due == nil && d.Due != nil {
+			t.Due = d.Due
+		}
+	}
+
+}
+
+func (t *Task) ShortID() string {
+	if len(t.ID) > 5 {
+		return t.ID[0:5]
+	} else {
+		return t.ID
+	}
 }
 
 type TaskValidateOpts struct {
@@ -50,20 +106,46 @@ type TaskService interface {
 	Edit(t *Task) (*Task, error)
 	EditSet(t []Task) error
 
+	// Should we use this instead of above funcs?
+	AddOrEditSet(tasks []Task) error
+
 	// Delete
 	Delete(t *Task) error
 
 	// Check to ensure Task is in a valid state
 	Validate(t *Task, o *TaskValidateOpts) error
 
+	// Sweet lord, this gettin' confusin' Drew
+	GetPlugins() (map[string]Creator, error)
+	SyncPlugin(TaskPlugin) error
+
+	// States of a Task
+	GetStates() []string
+	GetStatePaths() []string
+
 	// Just a little helper function to add and immediately mark as completed
 	Log(t, d *Task) (*Task, error)
 
 	List(prefix string) ([]Task, error)
 	Complete(t *Task) error
-	// Operations by ID (/$prefix/$id)
-	GetByID(id string) (*Task, error)
-	GetByIDWithPrefix(id string, prefix string) (*Task, error)
+	/*
+	   Path Conventions
+	   /${state}/${plugin-id}/${id}
+	   $state -> Active or Completed
+	   $plugin-id -> Could be 'default'...or ''...or 'plugin-1'
+	   $id -> Unique identifier
+
+	   $plugin-id/$id should be unique together. Think things like:
+	   gitlab.com/ISSUE-2
+	   gitlab.local.io/ISSUE-2
+	*/
+	// New way to get stuff
+	GetWithID(id, pluginID, state string) (*Task, error)
+	GetWithPartialID(partialID, pluginID, state string) (*Task, error)
+
+	// Old way to get stuff, delete soon
+	//GetByID(id string) (*Task, error)
+	GetByIDWithState(id string, prefix string) (*Task, error)
 	GetByPartialID(partialID string) (*Task, error)
 	GetByPartialIDWithPath(partialID string, prefix string) (*Task, error)
 	GetIDsByPrefix(prefix string) ([]string, error)
@@ -71,6 +153,36 @@ type TaskService interface {
 
 func (svc *TaskServiceOp) BucketName() string {
 	return fmt.Sprintf("/%v/tasks", svc.localClient.Namespace)
+}
+func (svc *TaskServiceOp) GetStates() []string {
+	return []string{"active", "completed"}
+}
+
+func (svc *TaskServiceOp) GetStatePaths() []string {
+	var r []string
+	for _, item := range svc.GetStates() {
+		r = append(r, filepath.Join("/", item))
+
+	}
+	return r
+}
+
+func (svc *TaskServiceOp) SyncPlugin(tp TaskPlugin) error {
+	ts, err := tp.Sync()
+	if err != nil {
+		return err
+	}
+	err = svc.localClient.Task.AddOrEditSet(ts)
+	if err != nil {
+		return err
+	}
+	log.Println(ts)
+	return nil
+}
+
+func (svc *TaskServiceOp) GetPlugins() (map[string]Creator, error) {
+	return TaskPlugins, nil
+
 }
 
 func (svc *TaskServiceOp) AddParent(c, p *Task) error {
@@ -99,21 +211,37 @@ func (svc *TaskServiceOp) AddChild(p, c *Task) error {
 	return nil
 }
 
-func (t *Task) DetectKeyPath() []byte {
-	// Is this a new active task, or just logging completed?
-	var keyPath string
-	if t.Completed == nil {
-		keyPath = fmt.Sprintf("/active/%s", t.ID)
-	} else {
-		keyPath = fmt.Sprintf("/completed/%s", t.ID)
+func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
+	var addSet []Task
+	var editSet []Task
+	for _, t := range tasks {
+		log.Warning(string(t.DetectKeyPath()))
+		_, err := svc.GetByExactPath(string(t.DetectKeyPath()))
+		if err != nil {
+			addSet = append(addSet, t)
+		} else {
+			editSet = append(editSet, t)
+		}
 	}
-	return []byte(keyPath)
 
+	err := svc.localClient.Task.AddSet(addSet, nil)
+	if err != nil {
+		return err
+	}
+	err = svc.localClient.Task.EditSet(editSet)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (svc *TaskServiceOp) EditSet(tasks []Task) error {
+	// We need to merge the new value with the old
+	var mergedTasks []Task
+
 	for _, t := range tasks {
-		originalTask, err := svc.GetByID(t.ID)
+		originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
 		if err != nil {
 			return errors.New("Cannot edit a task that did not previously exist: " + t.ID)
 		}
@@ -127,11 +255,43 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 		if err != nil {
 			return err
 		}
+
+		// Now do the merge
+		if err != nil {
+			return err
+		}
+		//var mergedTask Task
+		// Decide how to handle missing data and such
+		// Added should never change
+		t.Added = originalTask.Added
+
+		// Re-add the description if needed
+		if t.Description == "" {
+			t.Description = originalTask.Description
+		}
+
+		if t.Due == nil {
+			t.Due = originalTask.Due
+		}
+
+		if t.Completed == nil {
+			t.Completed = originalTask.Completed
+		}
+		if t.HideUntil == nil {
+			t.HideUntil = originalTask.HideUntil
+		}
+
+		if t.EffortImpact == 0 {
+			t.EffortImpact = originalTask.EffortImpact
+		}
+
+		mergedTasks = append(mergedTasks, t)
 	}
 
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		for _, t := range tasks {
+		for _, t := range mergedTasks {
 			taskSerial, err := json.Marshal(t)
+			log.Warning(t)
 			if err != nil {
 				return err
 			}
@@ -152,7 +312,7 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 }
 
 func (svc *TaskServiceOp) Delete(t *Task) error {
-	originalTask, err := svc.GetByID(t.ID)
+	originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
 	if err != nil {
 		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
 	}
@@ -170,7 +330,8 @@ func (svc *TaskServiceOp) Delete(t *Task) error {
 }
 
 func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
-	originalTask, err := svc.GetByID(t.ID)
+	//originalTask, err := svc.GetByID(t.ID)
+	originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
 	if err != nil {
 		return nil, errors.New("Cannot edit a task that did not previously exist: " + t.ID)
 	}
@@ -207,6 +368,10 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 		return fmt.Errorf("Missing description for Task")
 	}
 
+	if strings.Contains(t.ID, "/") {
+		return fmt.Errorf("ID Cannot contain a slash (/)")
+	}
+
 	// If not specified
 	if o == nil {
 		o = &TaskValidateOpts{}
@@ -214,7 +379,7 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 
 	// IF NEW, Make sure this ID doesn't already exist
 	if !o.IsExisting {
-		_, err := svc.GetByID(t.ID)
+		_, err := svc.GetWithID(t.ID, t.PluginID, "")
 		if err == nil {
 			return fmt.Errorf("Task with ID %v already exists", t.ID)
 		}
@@ -240,14 +405,6 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 		return fmt.Errorf("Found duplicate ids in the Parents field")
 	}
 	return nil
-}
-
-func (t *Task) ShortID() string {
-	if len(t.ID) > 5 {
-		return t.ID[0:5]
-	} else {
-		return t.ID
-	}
 }
 
 func (svc *TaskServiceOp) Describe(t *Task) error {
@@ -307,10 +464,50 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 
 type TaskServiceOp struct {
 	localClient *LocalClient
+	plugins     []TaskPlugin
+}
+
+func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*Task, error) {
+	var possibleStates []string
+	if state == "" {
+		possibleStates = svc.GetStatePaths()
+	} else {
+		possibleStates = append(possibleStates, state)
+	}
+	matches := []string{}
+	if pluginID == "" {
+		pluginID = "builtin"
+	}
+	qualifiedPartialID := filepath.Join(pluginID, partialID)
+	log.Warning(qualifiedPartialID)
+	for _, prefix := range possibleStates {
+		ids, err := svc.GetIDsByPrefix(fmt.Sprintf("%v/%v", prefix, qualifiedPartialID))
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			if strings.HasPrefix(id, fmt.Sprintf("%v/%v", prefix, qualifiedPartialID)) {
+				matches = append(matches, id)
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("No matches for %v found in %v", partialID, prefixes)
+	} else if len(matches) > 1 {
+		return nil, fmt.Errorf(
+			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
+	}
+	t, err := svc.GetByExactPath(matches[0])
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+
 }
 
 func (svc *TaskServiceOp) GetByPartialID(partialID string) (*Task, error) {
-	prefixes := []string{"/active", "/completed"}
+	//prefixes := []string{"/active", "/completed"}
+	prefixes := svc.GetStatePaths()
 	matches := []string{}
 	for _, prefix := range prefixes {
 		ids, err := svc.GetIDsByPrefix(prefix)
@@ -382,16 +579,46 @@ func (svc *TaskServiceOp) GetByExactPath(path string) (*Task, error) {
 	return &task, nil
 }
 
+func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
+	var possibleKeypaths []string
+	if pluginID == "" {
+		pluginID = "builtin"
+	}
+
+	if state != "" {
+		possibleKeypaths = append(possibleKeypaths, filepath.Join(state, pluginID, id))
+	} else {
+		for _, state := range svc.GetStatePaths() {
+			possibleKeypaths = append(possibleKeypaths, filepath.Join(state, pluginID, id))
+		}
+	}
+	for _, possible := range possibleKeypaths {
+		task, err := svc.GetByExactPath(possible)
+		if err == nil {
+			return task, nil
+		}
+
+	}
+	return nil, fmt.Errorf("Could not find that task at any of %v", possibleKeypaths)
+
+}
+
 func (svc *TaskServiceOp) GetByID(id string) (*Task, error) {
-	prefixes := []string{"/active", "/completed"}
+	var fullID string
+	if strings.Contains(id, "/") {
+		fullID = id
+	} else {
+		fullID = filepath.Join("builtin", id)
+	}
+	statePaths := svc.GetStatePaths()
 	var task *Task
 	var err error
-	for _, prefix := range prefixes {
-		task, err = svc.GetByIDWithPrefix(id, prefix)
+	for _, statePath := range statePaths {
+		task, err = svc.GetByIDWithState(fullID, statePath)
 		if err != nil {
-			log.Debugf("No task with id %v in %v", id, prefix)
+			log.Debugf("No task with id %v in %v", fullID, statePath)
 		} else {
-			log.Debugf("Found task %v %v", prefix, id)
+			log.Debugf("Found task %v %v", statePath, fullID)
 			return task, nil
 		}
 	}
@@ -399,23 +626,25 @@ func (svc *TaskServiceOp) GetByID(id string) (*Task, error) {
 	return nil, fmt.Errorf("No task found in %v", prefixes)
 }
 
-func (svc *TaskServiceOp) GetByIDWithPrefix(id string, prefix string) (*Task, error) {
-	var realPrefix string
-	if prefix == "" {
-		realPrefix = "/active"
+func (svc *TaskServiceOp) GetByIDWithState(id string, state string) (*Task, error) {
+	var realState string
+	if state == "" {
+		realState = "/active"
 	} else {
-		realPrefix = prefix
+		realState = state
 	}
 
 	var task Task
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		taskBytes := b.Get([]byte(fmt.Sprintf("%s/%s", realPrefix, id)))
+		k := fmt.Sprintf("%s/builtin/%s", realState, id)
+		taskBytes := b.Get([]byte(k))
 		if taskBytes == nil {
-			return fmt.Errorf("Could not find task: %s/%s", realPrefix, id)
+			return fmt.Errorf("Could not find task: %s/builtin/%s", realState, id)
 		}
 		err := json.Unmarshal(taskBytes, &task)
 		if err != nil {
+			log.Warning("ERR: ", err)
 			return err
 		}
 
@@ -494,7 +723,7 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 }
 func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
 	for _, task := range t {
-		_, err := svc.New(&task, d)
+		_, err := svc.Add(&task, d)
 		if err != nil {
 			log.Debug("Error adding task in set", t)
 			return err
@@ -508,21 +737,8 @@ func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
 	// t is the new task
 	// d are the defaults
 	// Detect the path based on if t.Completed has been used
-	now := time.Now()
-	if t.Added.IsZero() {
-		t.Added = now
-	}
 
-	// Handle defaults due
-	if d != nil {
-		if t.Due == nil && d.Due != nil {
-			t.Due = d.Due
-		}
-	}
-	// If no ID is set, just generate one
-	if t.ID == "" {
-		t.ID = fmt.Sprintf(uuid.New().String())
-	}
+	t.SetDefaults(d)
 
 	// Validate that Task is actually good
 	err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})
@@ -548,7 +764,7 @@ func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
 
 }
 
-func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
+/*func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 	// t is the new task
 	// d are the defaults
 	if t.Description == "" {
@@ -594,6 +810,7 @@ func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
 	return t, nil
 
 }
+*/
 
 func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	allIDs := []string{}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestPriorityStrings(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		id          int
 		description string

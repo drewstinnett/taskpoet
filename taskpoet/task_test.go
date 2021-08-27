@@ -239,6 +239,18 @@ func TestDuplicateIDs(t *testing.T) {
 		t.Error("Creating a duplicate ID did not present an error")
 	}
 
+	// Make sure IDs and PluginIDs are UniqueTogether
+	_, err = lc.Task.Add(&taskpoet.Task{ID: "duplicate-id-plugin", PluginID: "plugin-1", Description: "foo"}, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Try to create a new task with the same id
+	_, err = lc.Task.Add(&taskpoet.Task{ID: "duplicate-id-plugin", PluginID: "plugin-2", Description: "foo"}, &emptyDefaults)
+	if err != nil {
+		t.Error("Creating a duplicate ID with Plugin presented an error")
+	}
+
 }
 
 func TestGetByExactID(t *testing.T) {

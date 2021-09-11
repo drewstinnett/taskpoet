@@ -4,6 +4,11 @@ builds:
       - CGO_ENABLED=0
     main: ./cli/
     mod_timestamp: '{{ .CommitTimestamp }}'
+    ldflags:
+      - '-s -w'
+      - -X github.com/drewstinnett/taskpoet/cli/cmd.date={{ .CommitTimestamp }}
+      - -X github.com/drewstinnett/taskpoet/cli/cmd.version={{ .Tag }}
+      - -X github.com/drewstinnett/taskpoet/cli/cmd.commit={{ .ShortCommit }}
     flags:
       - -trimpath
     goos:
@@ -29,3 +34,18 @@ snapshot:
   name_template: "{{ .Tag }}-snapshot"
 changelog:
   skip: true
+
+brews:
+  - name: 'taskpoet'
+    skip_upload: true
+    tap:
+      owner: drewstinnett
+      name: homebrew-taskpoet
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    description: "Alternative to the awesome TaskWarrior, but in Go, with some additional stuff I find useful"
+    homepage: "https://github.com/drewstinnett/taskpoet"
+    license: BSD-2-Clause
+    caveats: |
+      Add the following in your ~/.zshrc or ~/.profile for faster typin':
+
+        alias tp="#{opt_bin}/taskpoet"

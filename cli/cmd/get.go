@@ -61,7 +61,13 @@ var getCmd = &cobra.Command{
 			} else {
 				dueHR = ""
 			}
-			row := []string{fmt.Sprintf("%v", task.ShortID()), age, task.Description, dueHR}
+			var desc string
+			if task.PluginID != "" {
+				desc = fmt.Sprintf("%v (%v)", task.Description, task.PluginID)
+			} else {
+				desc = task.Description
+			}
+			row := []string{fmt.Sprintf("%v", task.ShortID()), age, desc, dueHR}
 			data = append(data, row)
 		}
 		page := make([][]string, 0)

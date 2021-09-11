@@ -1,7 +1,6 @@
 package taskpoet_test
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -11,18 +10,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert/v2"
 	"github.com/pterm/pterm"
-	bolt "go.etcd.io/bbolt"
+	log "github.com/sirupsen/logrus"
 )
 
 // Local Client for lookups
 var lc *taskpoet.LocalClient
 var emptyDefaults taskpoet.Task
 var router *gin.Engine
+var dbConfig *taskpoet.DBConfig
 
 func setup() {
 	// Init a db
 	tmpfile, _ := ioutil.TempFile("", "taskpoet.*.db")
-	dbConfig := &taskpoet.DBConfig{Path: tmpfile.Name()}
+	dbConfig = &taskpoet.DBConfig{Path: tmpfile.Name()}
 	_ = taskpoet.InitDB(dbConfig)
 	lc, _ = taskpoet.NewLocalClient(dbConfig)
 	emptyDefaults = taskpoet.Task{}
@@ -36,7 +36,12 @@ func setup() {
 
 	// Populate with some various tasks to filter on
 }
-func shutdown() {}
+func shutdown() {
+	err := os.Remove(dbConfig.Path)
+	if err != nil {
+		log.Warning("Could not remove ", dbConfig.Path)
+	}
+}
 
 func TestMain(m *testing.M) {
 	setup()
@@ -45,13 +50,59 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+/*
+func TestAddLocalTask(t *testing.T) {
+	tests := []struct {
+		task taskpoet.Task
+		path string
+	}{
+		{
+			taskpoet.Task{ID: "add-1", Description: "foo-added-1"},
+			"/active/add-1",
+		},
+	}
+
+	for _, test := range tests {
+		lc.Task.Add(&test.task, nil)
+		gotTask := lc.Task.GetBy
+
+	}
+
+}
+*/
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		task  taskpoet.Task
+		valid bool
+	}{
+		{
+			taskpoet.Task{ID: "foo/bar", Description: "Invalid-id"},
+			false,
+		},
+	}
+
+	for _, test := range tests {
+		err := lc.Task.Validate(&test.task, nil)
+		var valid bool
+		if err != nil {
+			valid = false
+		} else {
+			valid = true
+		}
+		if valid != test.valid {
+			t.Errorf("Invalid result when testing validation. Wanted %v and got %v for %v", test.valid, valid, test.task)
+		}
+	}
+}
+
 func TestLogTask(t *testing.T) {
 
 	_, err := lc.Task.Log(&taskpoet.Task{ID: "log-this-task", Description: "foo"}, &emptyDefaults)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = lc.Task.GetByIDWithPrefix("log-this-task", "/completed")
+	_, err = lc.Task.GetWithID("log-this-task", "", "/completed")
 	if err != nil {
 		t.Error(err)
 	}
@@ -64,29 +115,24 @@ func TestCompleteTask(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	activePath := task.DetectKeyPath()
 
 	err = lc.Task.Complete(task)
 	if err != nil {
 		t.Errorf("Error completing Task")
 	}
+	completePath := task.DetectKeyPath()
 
-	// Now make sure we actually did something
-	err = lc.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(lc.Task.BucketName()))
-		old := b.Get([]byte(fmt.Sprintf("/active/%s", task.ID)))
-		if old != nil {
-			t.Errorf("When completing a task, the /active id is not removed")
-		}
-		new := b.Get([]byte(fmt.Sprintf("/completed/%s", task.ID)))
-		if new == nil {
-			t.Errorf("When completing a task, the /completed id is not created")
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Error(err)
+	_, err = lc.Task.GetWithExactPath(activePath)
+	if err == nil {
+		t.Errorf("When completing a task, the /active id is not removed")
 	}
+
+	_, err = lc.Task.GetWithExactPath(completePath)
+	if err != nil {
+		t.Errorf("When completing a task, the /completed id is not created")
+	}
+
 }
 
 func TestBlankDescription(t *testing.T) {
@@ -109,7 +155,7 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	task, err := lc.Task.GetByPartialIDWithPath("fake", "/active")
+	task, err := lc.Task.GetWithPartialID("fake", "", "/active")
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "fakeid" {
@@ -117,13 +163,13 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 	}
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetByPartialIDWithPath("dupthing", "/active")
+	_, err = lc.Task.GetWithPartialID("dupthing", "", "/active")
 	if err == nil {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
 	// Test for a non existant prefix
-	_, err = lc.Task.GetByPartialIDWithPath("this-will-never-exist", "/active")
+	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
 		t.Error("Tried to match on a non existant partial id, but did not error")
 	}
@@ -146,7 +192,9 @@ func TestDefaults(t *testing.T) {
 	}
 
 }
-func TestGetByID(t *testing.T) {
+
+//func TestGetByID(t *testing.T) {
+func TestGetByExactPath(t *testing.T) {
 	ts := []taskpoet.Task{
 		{Description: "foo", ID: "id-stay-active"},
 	}
@@ -154,9 +202,9 @@ func TestGetByID(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = lc.Task.GetByID("id-stay-active")
+	_, err = lc.Task.GetWithID("id-stay-active", "", "")
 	if err != nil {
-		t.Errorf("Could not GetByID for id-stay-active")
+		t.Errorf("Could not GetWithID for id-stay-active")
 	}
 
 	// Check completed
@@ -164,7 +212,7 @@ func TestGetByID(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = lc.Task.GetByID("id-in-completed")
+	_, err = lc.Task.GetWithID("id-in-completed", "", "")
 	if err != nil {
 		t.Errorf("Could not GetByID for id-in-completed")
 	}
@@ -184,12 +232,24 @@ func TestDuplicateIDs(t *testing.T) {
 		t.Error("Creating a duplicate ID did not present an error")
 	}
 
+	// Make sure IDs and PluginIDs are UniqueTogether
+	_, err = lc.Task.Add(&taskpoet.Task{ID: "duplicate-id-plugin", PluginID: "plugin-1", Description: "foo"}, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Try to create a new task with the same id
+	_, err = lc.Task.Add(&taskpoet.Task{ID: "duplicate-id-plugin", PluginID: "plugin-2", Description: "foo"}, &emptyDefaults)
+	if err != nil {
+		t.Error("Creating a duplicate ID with Plugin presented an error")
+	}
+
 }
 
 func TestGetByExactID(t *testing.T) {
 	ts := []taskpoet.Task{
-		{Description: "foo", ID: "fakeid"},
-		{Description: "foo", ID: "another_fakeid"},
+		{Description: "foo", ID: "fakeid-exact"},
+		{Description: "foo", ID: "another_fakeid-exact"},
 		{Description: "foo"},
 	}
 	err := lc.Task.AddSet(ts, &emptyDefaults)
@@ -197,14 +257,14 @@ func TestGetByExactID(t *testing.T) {
 		t.Error(err)
 	}
 	activePrefix := "/active"
-	task, err := lc.Task.GetByIDWithPrefix("another_fakeid", activePrefix)
+	task, err := lc.Task.GetWithID("another_fakeid-exact", "", activePrefix)
 	if err != nil {
 		t.Error(err)
-	} else if task.ID != "another_fakeid" {
-		t.Errorf("Expected to retrive 'another_fakeid' but got %v", task.ID)
+	} else if task.ID != "another_fakeid-exact" {
+		t.Errorf("Expected to retrive 'another_fakeid-exact' but got %v", task.ID)
 	}
 
-	_, err = lc.Task.GetByIDWithPrefix("another", activePrefix)
+	_, err = lc.Task.GetWithID("another", "", activePrefix)
 	if err == nil {
 		t.Error("Did not error when checking for an exact id that does not exist")
 	}
@@ -231,8 +291,8 @@ func TestAddParent(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	kid, _ := lc.Task.GetByIDWithPrefix("kid", "/active")
-	parent, _ := lc.Task.GetByIDWithPrefix("parent", "/active")
+	kid, _ := lc.Task.GetWithID("kid", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent", "", "/active")
 
 	// Make sure adding a parent works
 	kid.Parents = append(kid.Parents, parent.ID)
@@ -279,8 +339,8 @@ func TestShortID(t *testing.T) {
 		{ID: "foo-bar-baz-bazinga", Description: "Long ID"},
 	}
 	lc.Task.AddSet(tasks, nil)
-	short, _ := lc.Task.GetByIDWithPrefix("a", "/active")
-	long, _ := lc.Task.GetByIDWithPrefix("foo-bar-baz-bazinga", "/active")
+	short, _ := lc.Task.GetWithID("a", "", "/active")
+	long, _ := lc.Task.GetWithID("foo-bar-baz-bazinga", "", "/active")
 
 	if short.ShortID() != "a" {
 		t.Errorf("Short ID for %v did not return 'a'", short.ID)
@@ -330,12 +390,16 @@ func TestEditCompletedInvalid(t *testing.T) {
 
 func TestEditDescription(t *testing.T) {
 	task := &taskpoet.Task{ID: "test-edit-description", Description: "original"}
-	lc.Task.Add(task, nil)
+	_, err := lc.Task.Add(task, nil)
+	if err != nil {
+		t.Error(err)
+	}
 
 	task.Description = "New"
 	edited, err := lc.Task.Edit(task)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 	if edited.Description != "New" {
 		t.Error("Failed editing new description in Task")
@@ -353,8 +417,8 @@ func TestEditSet(t *testing.T) {
 		t.Error(err)
 	}
 
-	test1, _ := lc.Task.GetByIDWithPrefix("edit-set-1", "/active")
-	test2, _ := lc.Task.GetByIDWithPrefix("edit-set-2", "/active")
+	test1, _ := lc.Task.GetWithID("edit-set-1", "", "/active")
+	test2, _ := lc.Task.GetWithID("edit-set-2", "", "/active")
 
 	editSet := []taskpoet.Task{*test1, *test2}
 
@@ -377,8 +441,8 @@ func TestAddParentFunc(t *testing.T) {
 	}
 
 	// Get newly created items
-	kid, _ := lc.Task.GetByIDWithPrefix("kid-func", "/active")
-	parent, _ := lc.Task.GetByIDWithPrefix("parent-func", "/active")
+	kid, _ := lc.Task.GetWithID("kid-func", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent-func", "", "/active")
 
 	// Make sure adding a parent works
 	err = lc.Task.AddParent(kid, parent)
@@ -387,8 +451,8 @@ func TestAddParentFunc(t *testing.T) {
 	}
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetByIDWithPrefix("kid-func", "/active")
-	parent, _ = lc.Task.GetByIDWithPrefix("parent-func", "/active")
+	kid, _ = lc.Task.GetWithID("kid-func", "", "/active")
+	parent, _ = lc.Task.GetWithID("parent-func", "", "/active")
 
 	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
@@ -412,8 +476,8 @@ func TestAddChildFunc(t *testing.T) {
 	}
 
 	// Get newly created items
-	kid, _ := lc.Task.GetByIDWithPrefix("kid-func2", "/active")
-	parent, _ := lc.Task.GetByIDWithPrefix("parent-func2", "/active")
+	kid, _ := lc.Task.GetWithID("kid-func2", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent-func2", "", "/active")
 
 	// Make sure adding a parent works
 	err = lc.Task.AddChild(parent, kid)
@@ -422,8 +486,8 @@ func TestAddChildFunc(t *testing.T) {
 	}
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetByIDWithPrefix("kid-func2", "/active")
-	parent, _ = lc.Task.GetByIDWithPrefix("parent-func2", "/active")
+	kid, _ = lc.Task.GetWithID("kid-func2", "", "/active")
+	parent, _ = lc.Task.GetWithID("parent-func2", "", "/active")
 
 	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
@@ -445,7 +509,7 @@ func TestGetByPartialID(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	task, err := lc.Task.GetByPartialID("partial-id-test-2")
+	task, err := lc.Task.GetWithPartialID("partial-id-test-2", "", "")
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "partial-id-test-2" {
@@ -453,13 +517,13 @@ func TestGetByPartialID(t *testing.T) {
 	}
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetByPartialID("partial-id")
+	_, err = lc.Task.GetWithPartialID("partial-id", "", "")
 	if err == nil {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
 	// Test for a non existant prefix
-	_, err = lc.Task.GetByPartialIDWithPath("this-will-never-exist", "/active")
+	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
 		t.Error("Tried to match on a non existant partial id, but did not error")
 	}
@@ -473,8 +537,8 @@ func TestDescribe(t *testing.T) {
 		{Description: "Some parent", ID: "describe-parent"},
 	}
 	lc.Task.AddSet(ts, &emptyDefaults)
-	task, _ := lc.Task.GetByPartialIDWithPath("describe-test", "/active")
-	taskP, _ := lc.Task.GetByPartialIDWithPath("describe-parent", "/active")
+	task, _ := lc.Task.GetWithID("describe-test", "builtin", "/active")
+	taskP, _ := lc.Task.GetWithID("describe-parent", "builtin", "/active")
 	lc.Task.Describe(task)
 
 	// Describe with parent test
@@ -486,7 +550,7 @@ func TestDescribe(t *testing.T) {
 	lc.Task.Describe(task)
 
 	// Describe with parent test
-	taskP, err = lc.Task.GetByPartialIDWithPath("describe-parent", "/active")
+	taskP, err = lc.Task.GetWithID("describe-parent", "builtin", "/active")
 	if err != nil {
 		t.Error(err)
 	}
@@ -546,9 +610,85 @@ func TestDeleteTask(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = lc.Task.GetByID("delete-me")
+	_, err = lc.Task.GetWithID("delete-me", "", "")
 	if err == nil {
 		t.Error("Got task we should have deleted")
 	}
+
+}
+
+func TestDetectKeyPath(t *testing.T) {
+
+	tests := []struct {
+		task   taskpoet.Task
+		wanted string
+	}{
+		{
+			taskpoet.Task{ID: "foo", Description: "bar"},
+			"/active/builtin/foo",
+		},
+		{
+			taskpoet.Task{ID: "foo", Description: "bar", PluginID: "plugin-1"},
+			"/active/plugin-1/foo",
+		},
+	}
+
+	for _, test := range tests {
+		got := string(test.task.DetectKeyPath())
+		if got != test.wanted {
+			t.Errorf("Failed DetectKeyPath, wanted %v but got %v", test.wanted, got)
+		}
+	}
+
+}
+
+func TestAddOrEditSet(t *testing.T) {
+	ts := []taskpoet.Task{
+		{Description: "Foo", ID: "add-or-edit-do-edit-1"},
+	}
+	err := lc.Task.AddSet(ts, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+
+	aets := []taskpoet.Task{
+		{Description: "Edited-desc", ID: "add-or-edit-do-edit-1"},
+		{Description: "Added-desc", ID: "add-or-edit-do-add-1"},
+	}
+
+	err = lc.Task.AddOrEditSet(aets)
+	if err != nil {
+		t.Error(err)
+	}
+
+	edited, _ := lc.Task.GetWithID("add-or-edit-do-edit-1", "", "")
+	added, _ := lc.Task.GetWithID("add-or-edit-do-add-1", "", "")
+
+	assert.Equal(t, edited.Description, "Edited-desc")
+	assert.Equal(t, added.Description, "Added-desc")
+
+}
+
+func TestEditExistingValues(t *testing.T) {
+	ts := []taskpoet.Task{
+		{Description: "Foo", ID: "edit-existing-1"},
+	}
+	err := lc.Task.AddSet(ts, &emptyDefaults)
+	if err != nil {
+		t.Error(err)
+	}
+
+	aets := []taskpoet.Task{
+		{Description: "Update", ID: "edit-existing-1"},
+	}
+
+	err = lc.Task.AddOrEditSet(aets)
+	if err != nil {
+		t.Error(err)
+	}
+
+	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
+
+	assert.Equal(t, false, edited.Added.IsZero())
 
 }

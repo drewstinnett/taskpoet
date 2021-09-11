@@ -70,7 +70,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 		found, err := localClient.Task.Add(t, taskDefaults)
 		CheckErr(err)
 		if parentS != "" {
-			parent, err := localClient.Task.GetByPartialID(parentS)
+			parent, err := localClient.Task.GetWithPartialID(parentS, "", "")
 			CheckErr(err)
 			if parent != nil {
 				localClient.Task.AddParent(t, parent)

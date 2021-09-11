@@ -14,7 +14,7 @@ var completeCmd = &cobra.Command{
 	Aliases: []string{"c"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		task, err := localClient.Task.GetByPartialIDWithPath(args[0], "/active")
+		task, err := localClient.Task.GetWithPartialID(args[0], "", "/active")
 		CheckErr(err)
 		err = localClient.Task.Complete(task)
 		CheckErr(err)

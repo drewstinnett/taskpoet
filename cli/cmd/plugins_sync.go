@@ -27,7 +27,7 @@ var syncCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(syncCmd)
+	pluginsCmd.AddCommand(syncCmd)
 
 	// Here you will define your flags and configuration settings.
 

@@ -1,7 +1,6 @@
 package taskpoet_test
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	"github.com/go-playground/assert/v2"
 	"github.com/pterm/pterm"
 	log "github.com/sirupsen/logrus"
-	bolt "go.etcd.io/bbolt"
 )
 
 // Local Client for lookups
@@ -104,7 +102,7 @@ func TestLogTask(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = lc.Task.GetByIDWithState("log-this-task", "/completed")
+	_, err = lc.Task.GetWithID("log-this-task", "", "/completed")
 	if err != nil {
 		t.Error(err)
 	}
@@ -117,29 +115,24 @@ func TestCompleteTask(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	activePath := task.DetectKeyPath()
 
 	err = lc.Task.Complete(task)
 	if err != nil {
 		t.Errorf("Error completing Task")
 	}
+	completePath := task.DetectKeyPath()
 
-	// Now make sure we actually did something
-	err = lc.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(lc.Task.BucketName()))
-		old := b.Get([]byte(fmt.Sprintf("/active/%s", task.ID)))
-		if old != nil {
-			t.Errorf("When completing a task, the /active id is not removed")
-		}
-		new := b.Get([]byte(fmt.Sprintf("/completed/%s", task.ID)))
-		if new == nil {
-			t.Errorf("When completing a task, the /completed id is not created")
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Error(err)
+	_, err = lc.Task.GetWithExactPath(activePath)
+	if err == nil {
+		t.Errorf("When completing a task, the /active id is not removed")
 	}
+
+	_, err = lc.Task.GetWithExactPath(completePath)
+	if err != nil {
+		t.Errorf("When completing a task, the /completed id is not created")
+	}
+
 }
 
 func TestBlankDescription(t *testing.T) {
@@ -170,13 +163,13 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 	}
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetByPartialIDWithPath("dupthing", "/active")
+	_, err = lc.Task.GetWithPartialID("dupthing", "", "/active")
 	if err == nil {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
 	// Test for a non existant prefix
-	_, err = lc.Task.GetByPartialIDWithPath("this-will-never-exist", "/active")
+	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
 		t.Error("Tried to match on a non existant partial id, but did not error")
 	}
@@ -264,14 +257,14 @@ func TestGetByExactID(t *testing.T) {
 		t.Error(err)
 	}
 	activePrefix := "/active"
-	task, err := lc.Task.GetByIDWithState("another_fakeid-exact", activePrefix)
+	task, err := lc.Task.GetWithID("another_fakeid-exact", "", activePrefix)
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "another_fakeid-exact" {
 		t.Errorf("Expected to retrive 'another_fakeid-exact' but got %v", task.ID)
 	}
 
-	_, err = lc.Task.GetByIDWithState("another", activePrefix)
+	_, err = lc.Task.GetWithID("another", "", activePrefix)
 	if err == nil {
 		t.Error("Did not error when checking for an exact id that does not exist")
 	}
@@ -298,8 +291,8 @@ func TestAddParent(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	kid, _ := lc.Task.GetByIDWithState("kid", "/active")
-	parent, _ := lc.Task.GetByIDWithState("parent", "/active")
+	kid, _ := lc.Task.GetWithID("kid", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent", "", "/active")
 
 	// Make sure adding a parent works
 	kid.Parents = append(kid.Parents, parent.ID)
@@ -346,8 +339,8 @@ func TestShortID(t *testing.T) {
 		{ID: "foo-bar-baz-bazinga", Description: "Long ID"},
 	}
 	lc.Task.AddSet(tasks, nil)
-	short, _ := lc.Task.GetByIDWithState("a", "/active")
-	long, _ := lc.Task.GetByIDWithState("foo-bar-baz-bazinga", "/active")
+	short, _ := lc.Task.GetWithID("a", "", "/active")
+	long, _ := lc.Task.GetWithID("foo-bar-baz-bazinga", "", "/active")
 
 	if short.ShortID() != "a" {
 		t.Errorf("Short ID for %v did not return 'a'", short.ID)
@@ -424,8 +417,8 @@ func TestEditSet(t *testing.T) {
 		t.Error(err)
 	}
 
-	test1, _ := lc.Task.GetByIDWithState("edit-set-1", "/active")
-	test2, _ := lc.Task.GetByIDWithState("edit-set-2", "/active")
+	test1, _ := lc.Task.GetWithID("edit-set-1", "", "/active")
+	test2, _ := lc.Task.GetWithID("edit-set-2", "", "/active")
 
 	editSet := []taskpoet.Task{*test1, *test2}
 
@@ -448,8 +441,8 @@ func TestAddParentFunc(t *testing.T) {
 	}
 
 	// Get newly created items
-	kid, _ := lc.Task.GetByIDWithState("kid-func", "/active")
-	parent, _ := lc.Task.GetByIDWithState("parent-func", "/active")
+	kid, _ := lc.Task.GetWithID("kid-func", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent-func", "", "/active")
 
 	// Make sure adding a parent works
 	err = lc.Task.AddParent(kid, parent)
@@ -458,8 +451,8 @@ func TestAddParentFunc(t *testing.T) {
 	}
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetByIDWithState("kid-func", "/active")
-	parent, _ = lc.Task.GetByIDWithState("parent-func", "/active")
+	kid, _ = lc.Task.GetWithID("kid-func", "", "/active")
+	parent, _ = lc.Task.GetWithID("parent-func", "", "/active")
 
 	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
@@ -483,8 +476,8 @@ func TestAddChildFunc(t *testing.T) {
 	}
 
 	// Get newly created items
-	kid, _ := lc.Task.GetByIDWithState("kid-func2", "/active")
-	parent, _ := lc.Task.GetByIDWithState("parent-func2", "/active")
+	kid, _ := lc.Task.GetWithID("kid-func2", "", "/active")
+	parent, _ := lc.Task.GetWithID("parent-func2", "", "/active")
 
 	// Make sure adding a parent works
 	err = lc.Task.AddChild(parent, kid)
@@ -493,8 +486,8 @@ func TestAddChildFunc(t *testing.T) {
 	}
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetByIDWithState("kid-func2", "/active")
-	parent, _ = lc.Task.GetByIDWithState("parent-func2", "/active")
+	kid, _ = lc.Task.GetWithID("kid-func2", "", "/active")
+	parent, _ = lc.Task.GetWithID("parent-func2", "", "/active")
 
 	if !taskpoet.ContainsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
@@ -524,13 +517,13 @@ func TestGetByPartialID(t *testing.T) {
 	}
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetByPartialID("partial-id")
+	_, err = lc.Task.GetWithPartialID("partial-id", "", "")
 	if err == nil {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
 	// Test for a non existant prefix
-	_, err = lc.Task.GetByPartialIDWithPath("this-will-never-exist", "/active")
+	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
 		t.Error("Tried to match on a non existant partial id, but did not error")
 	}

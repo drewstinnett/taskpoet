@@ -35,7 +35,6 @@ func (p *Example) Description() string {
 }
 
 func init() {
-	log.Warning("IINIIIT")
 	taskpoet.AddPlugin("example", func() taskpoet.TaskPlugin {
 		return &Example{}
 	})

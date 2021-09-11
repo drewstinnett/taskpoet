@@ -15,8 +15,6 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const ()
-
 var prefixes []string
 
 type Task struct {
@@ -112,6 +110,9 @@ type TaskService interface {
 	// Delete
 	Delete(t *Task) error
 
+	// Complete a task
+	Complete(t *Task) error
+
 	// Check to ensure Task is in a valid state
 	Validate(t *Task, o *TaskValidateOpts) error
 
@@ -126,8 +127,8 @@ type TaskService interface {
 	// Just a little helper function to add and immediately mark as completed
 	Log(t, d *Task) (*Task, error)
 
+	// This on prolly needs work
 	List(prefix string) ([]Task, error)
-	Complete(t *Task) error
 	/*
 	   Path Conventions
 	   /${state}/${plugin-id}/${id}
@@ -142,12 +143,9 @@ type TaskService interface {
 	// New way to get stuff
 	GetWithID(id, pluginID, state string) (*Task, error)
 	GetWithPartialID(partialID, pluginID, state string) (*Task, error)
+	GetWithExactPath(path []byte) (*Task, error)
 
 	// Old way to get stuff, delete soon
-	//GetByID(id string) (*Task, error)
-	GetByIDWithState(id string, prefix string) (*Task, error)
-	GetByPartialID(partialID string) (*Task, error)
-	GetByPartialIDWithPath(partialID string, prefix string) (*Task, error)
 	GetIDsByPrefix(prefix string) ([]string, error)
 }
 
@@ -215,8 +213,7 @@ func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
 	var addSet []Task
 	var editSet []Task
 	for _, t := range tasks {
-		log.Warning(string(t.DetectKeyPath()))
-		_, err := svc.GetByExactPath(string(t.DetectKeyPath()))
+		_, err := svc.GetWithExactPath(t.DetectKeyPath())
 		if err != nil {
 			addSet = append(addSet, t)
 		} else {
@@ -241,7 +238,7 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 	var mergedTasks []Task
 
 	for _, t := range tasks {
-		originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
+		originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 		if err != nil {
 			return errors.New("Cannot edit a task that did not previously exist: " + t.ID)
 		}
@@ -312,7 +309,7 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 }
 
 func (svc *TaskServiceOp) Delete(t *Task) error {
-	originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
+	originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 	if err != nil {
 		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
 	}
@@ -331,7 +328,7 @@ func (svc *TaskServiceOp) Delete(t *Task) error {
 
 func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 	//originalTask, err := svc.GetByID(t.ID)
-	originalTask, err := svc.GetByExactPath(string(t.DetectKeyPath()))
+	originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 	if err != nil {
 		return nil, errors.New("Cannot edit a task that did not previously exist: " + t.ID)
 	}
@@ -432,14 +429,14 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 	var parentsBuff bytes.Buffer
 	var childrenBuff bytes.Buffer
 	for _, p := range t.Parents {
-		parent, err := svc.GetByID(p)
+		parent, err := svc.GetWithID(p, "", "")
 		if err != nil {
 			return nil
 		}
 		parentsBuff.Write([]byte(parent.Description))
 	}
 	for _, c := range t.Children {
-		child, err := svc.GetByID(c)
+		child, err := svc.GetWithID(c, "", "")
 		if err != nil {
 			return nil
 		}
@@ -497,7 +494,7 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 		return nil, fmt.Errorf(
 			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
 	}
-	t, err := svc.GetByExactPath(matches[0])
+	t, err := svc.GetWithExactPath([]byte(matches[0]))
 	if err != nil {
 		return nil, err
 	}
@@ -505,59 +502,7 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 
 }
 
-func (svc *TaskServiceOp) GetByPartialID(partialID string) (*Task, error) {
-	//prefixes := []string{"/active", "/completed"}
-	prefixes := svc.GetStatePaths()
-	matches := []string{}
-	for _, prefix := range prefixes {
-		ids, err := svc.GetIDsByPrefix(prefix)
-		if err != nil {
-			return nil, err
-		}
-		for _, id := range ids {
-			if strings.HasPrefix(id, fmt.Sprintf("%v/%v", prefix, partialID)) {
-				matches = append(matches, id)
-			}
-		}
-	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("No matches for %v found in %v", partialID, prefixes)
-	} else if len(matches) > 1 {
-		return nil, fmt.Errorf(
-			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
-	}
-	t, err := svc.GetByExactPath(matches[0])
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-func (svc *TaskServiceOp) GetByPartialIDWithPath(partialID string, prefix string) (*Task, error) {
-	ids, err := svc.GetIDsByPrefix(prefix)
-	if err != nil {
-		return nil, err
-	}
-	matches := []string{}
-	for _, id := range ids {
-		if strings.HasPrefix(id, fmt.Sprintf("%v/%v", prefix, partialID)) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("No matches for %v found in %v", partialID, prefix)
-	} else if len(matches) > 1 {
-		return nil, fmt.Errorf(
-			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefix, matches)
-	}
-	t, err := svc.GetByExactPath(matches[0])
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-func (svc *TaskServiceOp) GetByExactPath(path string) (*Task, error) {
+func (svc *TaskServiceOp) GetWithExactPath(path []byte) (*Task, error) {
 	var task Task
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
@@ -593,7 +538,7 @@ func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 		}
 	}
 	for _, possible := range possibleKeypaths {
-		task, err := svc.GetByExactPath(possible)
+		task, err := svc.GetWithExactPath([]byte(possible))
 		if err == nil {
 			return task, nil
 		}
@@ -603,74 +548,22 @@ func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 
 }
 
-func (svc *TaskServiceOp) GetByID(id string) (*Task, error) {
-	var fullID string
-	if strings.Contains(id, "/") {
-		fullID = id
-	} else {
-		fullID = filepath.Join("builtin", id)
-	}
-	statePaths := svc.GetStatePaths()
-	var task *Task
-	var err error
-	for _, statePath := range statePaths {
-		task, err = svc.GetByIDWithState(fullID, statePath)
-		if err != nil {
-			log.Debugf("No task with id %v in %v", fullID, statePath)
-		} else {
-			log.Debugf("Found task %v %v", statePath, fullID)
-			return task, nil
-		}
-	}
-
-	return nil, fmt.Errorf("No task found in %v", prefixes)
-}
-
-func (svc *TaskServiceOp) GetByIDWithState(id string, state string) (*Task, error) {
-	var realState string
-	if state == "" {
-		realState = "/active"
-	} else {
-		realState = state
-	}
-
-	var task Task
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		k := fmt.Sprintf("%s/builtin/%s", realState, id)
-		taskBytes := b.Get([]byte(k))
-		if taskBytes == nil {
-			return fmt.Errorf("Could not find task: %s/builtin/%s", realState, id)
-		}
-		err := json.Unmarshal(taskBytes, &task)
-		if err != nil {
-			log.Warning("ERR: ", err)
-			return err
-		}
-
-		return nil
-
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &task, nil
-}
-
 func (svc *TaskServiceOp) Complete(t *Task) error {
 	now := time.Now()
+	activePath := t.DetectKeyPath()
 	t.Completed = &now
+	completePath := t.DetectKeyPath()
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		taskSerial, err := json.Marshal(t)
 		if err != nil {
 			return err
 		}
-		err = b.Put([]byte(fmt.Sprintf("/completed/%s", t.ID)), taskSerial)
+		err = b.Put(completePath, taskSerial)
 		if err != nil {
 			return err
 		}
-		b.Delete([]byte(fmt.Sprintf("/active/%s", t.ID)))
+		b.Delete(activePath)
 		return nil
 	})
 

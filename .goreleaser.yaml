@@ -40,7 +40,7 @@ brews:
     tap:
       owner: drewstinnett
       name: homebrew-taskpoet
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.GITHUB_HOMEBREW_TAP_GITHUB_TOKEN }}"
     description: "Alternative to the awesome TaskWarrior, but in Go, with some additional stuff I find useful"
     homepage: "https://github.com/drewstinnett/taskpoet"
     license: BSD-2-Clause

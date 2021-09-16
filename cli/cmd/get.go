@@ -62,7 +62,7 @@ var getCmd = &cobra.Command{
 				dueHR = ""
 			}
 			var desc string
-			if task.PluginID != "" {
+			if task.PluginID != "builtin" {
 				desc = fmt.Sprintf("%v (%v)", task.Description, task.PluginID)
 			} else {
 				desc = task.Description

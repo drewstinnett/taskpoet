@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -76,7 +77,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 				localClient.Task.AddParent(t, parent)
 			}
 		}
-		localClient.Task.Describe(found)
+		fmt.Printf("Added task '%v'\n", found.Description)
 	},
 }
 

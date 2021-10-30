@@ -23,10 +23,14 @@ var dbConfig *taskpoet.DBConfig
 var taskDefaults *taskpoet.Task
 
 // rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-	Use:   "taskpoet",
-	Short: "Do task tracking similiar to the olden ways of TaskWarrior",
-	Long: `Designed to be similar to TaskWarrior, with some updated features, and specifics
+//var rootCmd *cobra.Command
+
+//var rootCmd = &cobra.Command{
+func NewRootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "taskpoet",
+		Short: "Do task tracking similiar to the olden ways of TaskWarrior",
+		Long: `Designed to be similar to TaskWarrior, with some updated features, and specifics
 around the Tom Limoncelli methods to task management.
 
 Key Concepts:
@@ -38,19 +42,22 @@ Effort/Impact Assessment, based on Limoncelli concept
 2 - High Effort, High Impact (Homework)
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if Verbose {
-			log.SetLevel(log.DebugLevel)
-		}
-	},
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if Verbose {
+				log.SetLevel(log.DebugLevel)
+			}
+		},
+	}
+	return cmd
 }
+
+var rootCmd = NewRootCmd()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
+
 func Execute() {
+	//rootCmd := NewRootCmd()
 
 	cmd, _, err := rootCmd.Find(os.Args[1:])
 	// default cmd if no cmd is given
@@ -67,7 +74,10 @@ func Execute() {
 	//cobra.CheckErr(rootCmd.Execute())
 }
 
+//var rootCmd *cobra.Command
+
 func init() {
+	//rootCmd = NewRootCmd()
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.

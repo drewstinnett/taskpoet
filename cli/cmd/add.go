@@ -41,6 +41,9 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 			}
 		}
 
+		// Get Tags
+		tags, _ := cmd.PersistentFlags().GetStringSlice("tag")
+
 		// HideUntil parsing
 		waitS, _ := cmd.PersistentFlags().GetString("wait")
 		var wait time.Duration
@@ -56,6 +59,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 		t := &taskpoet.Task{
 			Description:  strings.Join(args, " "),
 			EffortImpact: effortImpact,
+			Tags:         tags,
 		}
 
 		// Did we specify a due date?
@@ -82,6 +86,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 }
 
 func init() {
+
 	rootCmd.AddCommand(addCmd)
 
 	// Here you will define your flags and configuration settings.
@@ -93,6 +98,7 @@ func init() {
 	addCmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
 	addCmd.PersistentFlags().StringP("due", "d", "", "How long before this is due?")
 	addCmd.PersistentFlags().StringP("wait", "w", "", "Wait until given duration to actually show up as active")
+	addCmd.PersistentFlags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
 
 	// addCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

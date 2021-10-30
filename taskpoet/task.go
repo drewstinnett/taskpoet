@@ -28,6 +28,7 @@ type Task struct {
 	EffortImpact uint       `json:"effort_impact"`
 	Children     []string   `json:"children,omitempty"`
 	Parents      []string   `json:"parents,omitempty"`
+	Tags         []string   `json:"tags,omitempty"`
 }
 
 func (t *Task) DetectKeyPath() []byte {
@@ -453,6 +454,7 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 		{"Effort/Impact", EffortImpactText(int(t.EffortImpact)), fmt.Sprintf("%+v", t.EffortImpact)},
 		{"Parents", parentsBuff.String(), fmt.Sprintf("%+v", t.Parents)},
 		{"Children", childrenBuff.String(), fmt.Sprintf("%+v", t.Children)},
+		{"Tags", fmt.Sprintf("%+v", t.Tags), ""},
 	}
 
 	pterm.DefaultTable.WithHasHeader().WithData(data).Render()
@@ -476,7 +478,6 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 		pluginID = "builtin"
 	}
 	qualifiedPartialID := filepath.Join(pluginID, partialID)
-	log.Warning(qualifiedPartialID)
 	for _, prefix := range possibleStates {
 		ids, err := svc.GetIDsByPrefix(fmt.Sprintf("%v/%v", prefix, qualifiedPartialID))
 		if err != nil {

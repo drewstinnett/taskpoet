@@ -16,72 +16,78 @@ import (
 )
 
 // getPendingCmd represents the getPending command
-var getCmd = &cobra.Command{
-	Use:     "active",
-	Short:   "Get Active tasks, waiting to be completed",
-	Aliases: []string{"g", "a", "get"},
-	Long: `Get Active Tasks
+//var getCmd = &cobra.Command{
+func NewGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "active",
+		Short:   "Get Active tasks, waiting to be completed",
+		Aliases: []string{"g", "a", "get"},
+		Long: `Get Active Tasks
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		var results []taskpoet.Task
-		var err error
-		var filter string
+		Run: func(cmd *cobra.Command, args []string) {
+			var results []taskpoet.Task
+			var err error
+			var filter string
 
-		// Figure out the limit
-		limit, _ := cmd.PersistentFlags().GetInt("limit")
+			// Figure out the limit
+			limit, _ := cmd.PersistentFlags().GetInt("limit")
 
-		now := time.Now()
-		results, err = localClient.Task.List("/active")
-		CheckErr(err)
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Added.Before(results[j].Added)
-		})
+			now := time.Now()
+			results, err = localClient.Task.List("/active")
+			CheckErr(err)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].Added.Before(results[j].Added)
+			})
 
-		var re *regexp.Regexp
-		if len(args) > 0 {
-			filter = fmt.Sprintf("(?i)%v", strings.Join(args, " "))
-			re = regexp.MustCompile(filter)
-			log.Debugf("Showing tasks that match '%v' regex", re)
-		}
-
-		data := make([][]string, 0)
-		data = append(data, []string{"ID", "Age", "Description", "Due"})
-		for _, task := range results {
-			// Ignore things still hidden
-			if task.HideUntil != nil && task.HideUntil.After(now) {
-				continue
+			var re *regexp.Regexp
+			if len(args) > 0 {
+				filter = fmt.Sprintf("(?i)%v", strings.Join(args, " "))
+				re = regexp.MustCompile(filter)
+				log.Debugf("Showing tasks that match '%v' regex", re)
 			}
-			if filter != "" && !re.Match([]byte(task.Description)) {
-				continue
-			}
-			age := humanize.Time(task.Added)
-			var dueHR string
-			if task.Due != nil {
-				dueHR = humanize.Time(*task.Due)
-			} else {
-				dueHR = ""
-			}
-			var desc string
-			if task.PluginID != "builtin" {
-				desc = fmt.Sprintf("%v (%v)", task.Description, task.PluginID)
-			} else {
-				desc = task.Description
-			}
-			row := []string{fmt.Sprintf("%v", task.ShortID()), age, desc, dueHR}
-			data = append(data, row)
-		}
-		page := make([][]string, 0)
 
-		From(data).Skip(0).Take(limit).ToSlice(&page)
+			data := make([][]string, 0)
+			data = append(data, []string{"ID", "Age", "Description", "Due", "Tags"})
+			for _, task := range results {
+				// Ignore things still hidden
+				if task.HideUntil != nil && task.HideUntil.After(now) {
+					continue
+				}
+				if filter != "" && !re.Match([]byte(task.Description)) {
+					continue
+				}
+				age := humanize.Time(task.Added)
+				var dueHR string
+				if task.Due != nil {
+					dueHR = humanize.Time(*task.Due)
+				} else {
+					dueHR = ""
+				}
+				var desc string
+				if task.PluginID != "builtin" {
+					desc = fmt.Sprintf("%v (%v)", task.Description, task.PluginID)
+				} else {
+					desc = task.Description
+				}
+				row := []string{fmt.Sprintf("%v", task.ShortID()), age, desc, dueHR, fmt.Sprintf("%+v", task.Tags)}
+				data = append(data, row)
+			}
+			page := make([][]string, 0)
 
-		//pterm.DefaultTable.WithHasHeader().WithData(data).Render()
-		pterm.DefaultTable.WithHasHeader().WithData(page).Render()
+			From(data).Skip(0).Take(limit).ToSlice(&page)
 
-		if limit < len(data) {
-			log.Warningf("%v more records to display, increase the limit to see it", len(data)-limit)
-		}
-	},
+			//pterm.DefaultTable.WithHasHeader().WithData(data).Render()
+			pterm.DefaultTable.WithHasHeader().WithData(page).Render()
+
+			if limit < len(data) {
+				log.Warningf("%v more records to display, increase the limit to see it", len(data)-limit)
+			}
+		},
+	}
+	return cmd
 }
+
+var getCmd = NewGetCmd()
 
 func init() {
 	rootCmd.AddCommand(getCmd)

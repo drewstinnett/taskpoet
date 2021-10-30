@@ -27,9 +27,9 @@ var getCompleteCmd = &cobra.Command{
 		})
 
 		data := make([][]string, 0)
-		data = append(data, []string{"ID", "Description", "Completed"})
+		data = append(data, []string{"ID", "Description", "Completed", "Tags"})
 		for _, task := range results {
-			row := []string{fmt.Sprintf("%v", task.ID[0:5]), task.Description, humanize.Time(*task.Completed)}
+			row := []string{fmt.Sprintf("%v", task.ID[0:5]), task.Description, humanize.Time(*task.Completed), fmt.Sprintf("%+v", task.Tags)}
 			data = append(data, row)
 		}
 		pterm.DefaultTable.WithHasHeader().WithData(data).Render()

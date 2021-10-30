@@ -15,7 +15,9 @@ limitations under the License.
 */
 package main
 
-import "github.com/drewstinnett/taskpoet/cli/cmd"
+import (
+	"github.com/drewstinnett/taskpoet/cli/cmd"
+)
 
 func main() {
 	cmd.Execute()

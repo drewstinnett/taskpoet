@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/ahmetb/go-linq/v3"
+	. "github.com/ahmetb/go-linq/v3" // nolint
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/dustin/go-humanize"
 	"github.com/pterm/pterm"
@@ -15,9 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// getPendingCmd represents the getPending command
-//var getCmd = &cobra.Command{
-func NewGetCmd() *cobra.Command {
+// NewGetCmd is the new get command
+func NewGetCmd() *cobra.Command { //nolint:gocognit,funlen
 	cmd := &cobra.Command{
 		Use:     "active",
 		Short:   "Get Active tasks, waiting to be completed",
@@ -34,7 +33,7 @@ func NewGetCmd() *cobra.Command {
 
 			now := time.Now()
 			results, err = localClient.Task.List("/active")
-			CheckErr(err)
+			checkErr(err)
 			sort.Slice(results, func(i, j int) bool {
 				return results[i].Added.Before(results[j].Added)
 			})
@@ -76,8 +75,8 @@ func NewGetCmd() *cobra.Command {
 
 			From(data).Skip(0).Take(limit).ToSlice(&page)
 
-			//pterm.DefaultTable.WithHasHeader().WithData(data).Render()
-			pterm.DefaultTable.WithHasHeader().WithData(page).Render()
+			// pterm.DefaultTable.WithHasHeader().WithData(data).Render()
+			checkErr(pterm.DefaultTable.WithHasHeader().WithData(page).Render())
 
 			if limit < len(data) {
 				log.Warningf("%v more records to display, increase the limit to see it", len(data)-limit)

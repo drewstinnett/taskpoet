@@ -16,6 +16,7 @@ import (
 //go:embed static/*
 var apiDir embed.FS
 
+// Pagination is the pagination yo
 type Pagination struct {
 	Limit   uint   `json:"limit"`
 	Page    uint   `json:"page"`
@@ -23,12 +24,14 @@ type Pagination struct {
 	HasMore bool   `json:"hasmore"`
 }
 
+// RouterConfig configures the router
 type RouterConfig struct {
 	Debug       bool
 	Port        uint
-	LocalClient *LocalClient
+	LocalClient *Poet
 }
 
+// NewRouter returns a new http router
 func NewRouter(rc *RouterConfig) *gin.Engine {
 	if rc == nil {
 		rc = &RouterConfig{}
@@ -45,7 +48,6 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 	r.Use(APIClient(rc.LocalClient))
 	r.Use(gin.Recovery())
 
-	// TODO: Explore what this should actually be
 	if gin.Mode() == "debug" {
 		r.Use(cors.Default())
 	}
@@ -55,16 +57,16 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 	apiV1.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
-	//apiV1.GET("/active", TaskAPIListActive)
-	//apiV1.GET("/completed", TaskAPIListCompleted)
-	apiV1.GET("/tasks", TaskAPIList)
-	apiV1.POST("/tasks", TaskAPIAdd)
-	apiV1.GET("/tasks/:id", TaskAPIGet)
-	apiV1.PUT("/tasks/:id", TaskAPIEdit)
-	apiV1.DELETE("/tasks/:id", TaskAPIDelete)
+	// apiV1.GET("/active", TaskAPIListActive)
+	// apiV1.GET("/completed", TaskAPIListCompleted)
+	apiV1.GET("/tasks", taskAPIList)
+	apiV1.POST("/tasks", taskAPIAdd)
+	apiV1.GET("/tasks/:id", taskAPIGet)
+	apiV1.PUT("/tasks/:id", taskAPIEdit)
+	apiV1.DELETE("/tasks/:id", taskAPIDelete)
 
 	// Swagger/OpenAPI Stuff
-	//url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
+	// url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
 
 	// r.Static("/apidocs/", "api/")
 	// index.html won't work with this, use index.htm instead
@@ -76,13 +78,14 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 	return r
 }
 
-func APIClient(client *LocalClient) gin.HandlerFunc {
+// APIClient is an API Client
+func APIClient(client *Poet) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("client", *client)
 	}
 }
 
-func GeneratePaginationFromRequest(c *gin.Context) Pagination {
+func generatePaginationFromRequest(c *gin.Context) Pagination {
 	// Initializing default
 	//	var mode string
 	limit := 10
@@ -94,14 +97,10 @@ func GeneratePaginationFromRequest(c *gin.Context) Pagination {
 		switch key {
 		case "limit":
 			limit, _ = strconv.Atoi(queryValue)
-			break
 		case "page":
 			page, _ = strconv.Atoi(queryValue)
-			break
 		case "sort":
 			sort = queryValue
-			break
-
 		}
 	}
 	return Pagination{
@@ -109,11 +108,9 @@ func GeneratePaginationFromRequest(c *gin.Context) Pagination {
 		Page:  uint(page),
 		Sort:  sort,
 	}
-
 }
 
-func GetBoolParam(c *gin.Context, paramName string, paramDefault bool) (bool, error) {
-
+func getBoolParam(c *gin.Context, paramName string, paramDefault bool) (bool, error) {
 	paramGot := c.Query(paramName)
 	// If nothing, just use the default
 	if paramGot == "" {
@@ -122,13 +119,11 @@ func GetBoolParam(c *gin.Context, paramName string, paramDefault bool) (bool, er
 	paramBool, err := strconv.ParseBool(paramGot)
 	if err != nil {
 		return false, err
-	} else {
-		return paramBool, nil
 	}
-
+	return paramBool, nil
 }
 
-func CheckAPIErr(c *gin.Context, err error) {
+func checkAPIErr(c *gin.Context, err error) {
 	if err != nil {
 		c.AbortWithStatusJSON(500, map[string]string{"message": fmt.Sprintf("%+v", err)})
 	}

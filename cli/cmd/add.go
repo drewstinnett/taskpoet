@@ -20,7 +20,6 @@ var addCmd = &cobra.Command{
 $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 	Long: `Add new task`,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Put some basics up here
 		now := time.Now()
 		var err error
@@ -73,12 +72,12 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 		}
 
 		found, err := localClient.Task.Add(t, taskDefaults)
-		CheckErr(err)
+		checkErr(err)
 		if parentS != "" {
 			parent, err := localClient.Task.GetWithPartialID(parentS, "", "")
-			CheckErr(err)
+			checkErr(err)
 			if parent != nil {
-				localClient.Task.AddParent(t, parent)
+				checkErr(localClient.Task.AddParent(t, parent))
 			}
 		}
 		fmt.Printf("Added task '%v'\n", found.Description)
@@ -86,7 +85,6 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 }
 
 func init() {
-
 	rootCmd.AddCommand(addCmd)
 
 	// Here you will define your flags and configuration settings.

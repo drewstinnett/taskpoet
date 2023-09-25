@@ -27,7 +27,6 @@ func TestParseDuration(t *testing.T) {
 		if dur.Seconds() != test.seconds {
 			t.Errorf("Expected %v seconds from duration %v...but got %v", test.seconds, test.duration, dur.Seconds())
 		}
-
 	}
 }
 
@@ -48,7 +47,6 @@ func TestParseInvalidDuration(t *testing.T) {
 		if err == nil {
 			t.Errorf("Did not return an error when parsing the invalid duration: '%v'", test.duration)
 		}
-
 	}
 }
 

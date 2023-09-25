@@ -15,9 +15,9 @@ var completeCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		task, err := localClient.Task.GetWithPartialID(args[0], "", "/active")
-		CheckErr(err)
+		checkErr(err)
 		err = localClient.Task.Complete(task)
-		CheckErr(err)
+		checkErr(err)
 		log.Printf("Completed task: '%v', nice work!", task.Description)
 	},
 }

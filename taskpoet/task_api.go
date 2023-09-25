@@ -6,18 +6,19 @@ import (
 	"io/ioutil"
 	"strings"
 
-	. "github.com/ahmetb/go-linq/v3"
+	. "github.com/ahmetb/go-linq/v3" // nolint
 
 	"github.com/gin-gonic/gin"
 )
 
+// APITaskResponse is the task response
 type APITaskResponse struct {
 	Pagination Pagination `json:"pagination"`
 	Data       []Task     `json:"data"`
 }
 
-func TaskAPIAdd(c *gin.Context) {
-	client, ok := c.Keys["client"].(LocalClient)
+func taskAPIAdd(c *gin.Context) {
+	client, ok := c.Keys["client"].(Poet)
 	if !ok {
 		c.JSON(500, map[string]string{
 			"message": "Could not look up LocalClient in context",
@@ -29,29 +30,30 @@ func TaskAPIAdd(c *gin.Context) {
 		return
 	}
 	jsonData, err := ioutil.ReadAll(c.Request.Body)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 	jsonDataS := string(jsonData)
 
 	var tasks []Task
-	if strings.HasPrefix(jsonDataS, "{") {
+	switch {
+	case strings.HasPrefix(jsonDataS, "{"):
 		var task Task
-		err := json.Unmarshal(jsonData, &task)
-		CheckAPIErr(c, err)
+		uerr := json.Unmarshal(jsonData, &task)
+		checkAPIErr(c, uerr)
 
 		tasks = append(tasks, task)
-	} else if strings.HasPrefix(jsonDataS, "[") {
+	case strings.HasPrefix(jsonDataS, "["):
 		return
-	} else {
+	default:
 		c.AbortWithStatusJSON(500, map[string]string{"message": "Could not detect if posted data was array or object"})
 	}
 
 	// Add Tasks
 	err = client.Task.AddSet(tasks, nil)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 }
 
-func TaskAPIList(c *gin.Context) {
-	client, ok := c.Keys["client"].(LocalClient)
+func taskAPIList(c *gin.Context) {
+	client, ok := c.Keys["client"].(Poet)
 	if !ok {
 		c.JSON(500, map[string]string{
 			"message": "Could not look up LocalClient in context",
@@ -60,35 +62,35 @@ func TaskAPIList(c *gin.Context) {
 
 	var tasks []Task
 
-	includeCompleted, err := GetBoolParam(c, "include_completed", false)
-	CheckAPIErr(c, err)
+	includeCompleted, err := getBoolParam(c, "include_completed", false)
+	checkAPIErr(c, err)
 
-	includeActive, err := GetBoolParam(c, "include_active", true)
-	CheckAPIErr(c, err)
+	includeActive, err := getBoolParam(c, "include_active", true)
+	checkAPIErr(c, err)
 
 	// Must specify active or completed
 	if !includeCompleted && !includeActive {
 		c.AbortWithStatusJSON(
 			500,
-			map[string]string{"message": fmt.Sprint("Must set either include_completed or include_active to true")})
+			map[string]string{"message": "Must set either include_completed or include_active to true"})
 	}
 
 	if includeActive {
 		aTasks, err := client.Task.List("/active")
-		CheckAPIErr(c, err)
+		checkAPIErr(c, err)
 		tasks = append(tasks, aTasks...)
 	}
 
 	if includeCompleted {
 		cTasks, err := client.Task.List("/completed")
-		CheckAPIErr(c, err)
+		checkAPIErr(c, err)
 		tasks = append(tasks, cTasks...)
 	}
 
 	// Do some calculations
 	totalTasks := len(tasks)
 
-	pagination := GeneratePaginationFromRequest(c)
+	pagination := generatePaginationFromRequest(c)
 	var pageData []Task
 	skip := int(pagination.Limit * (pagination.Page - 1))
 	From(tasks).Skip(skip).Take(int(pagination.Limit)).ToSlice(&pageData)
@@ -104,11 +106,10 @@ func TaskAPIList(c *gin.Context) {
 		Data:       pageData,
 		Pagination: pagination,
 	})
-
 }
 
-func TaskAPIGet(c *gin.Context) {
-	client, _ := c.Keys["client"].(LocalClient)
+func taskAPIGet(c *gin.Context) {
+	client, _ := c.Keys["client"].(Poet)
 
 	id := c.Param("id")
 	task, err := client.Task.GetWithID(id, "", "")
@@ -120,11 +121,10 @@ func TaskAPIGet(c *gin.Context) {
 	}
 
 	c.JSON(200, task)
-
 }
 
-func TaskAPIEdit(c *gin.Context) {
-	client, _ := c.Keys["client"].(LocalClient)
+func taskAPIEdit(c *gin.Context) {
+	client, _ := c.Keys["client"].(Poet)
 
 	id := c.Param("id")
 	_, err := client.Task.GetWithID(id, "", "")
@@ -137,19 +137,18 @@ func TaskAPIEdit(c *gin.Context) {
 
 	var editTask Task
 	jsonData, err := ioutil.ReadAll(c.Request.Body)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 	err = json.Unmarshal(jsonData, &editTask)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 
 	retTask, err := client.Task.Edit(&editTask)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 
 	c.JSON(200, retTask)
-
 }
 
-func TaskAPIDelete(c *gin.Context) {
-	client, _ := c.Keys["client"].(LocalClient)
+func taskAPIDelete(c *gin.Context) {
+	client, _ := c.Keys["client"].(Poet)
 
 	id := c.Param("id")
 	task, err := client.Task.GetWithID(id, "", "")
@@ -161,7 +160,6 @@ func TaskAPIDelete(c *gin.Context) {
 	}
 
 	err = client.Task.Delete(task)
-	CheckAPIErr(c, err)
+	checkAPIErr(c, err)
 	c.JSON(200, "")
-
 }

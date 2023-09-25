@@ -17,7 +17,7 @@ var serverCmd = &cobra.Command{
 			LocalClient: localClient,
 		}
 		r := taskpoet.NewRouter(c)
-		r.Run()
+		checkErr(r.Run())
 	},
 }
 

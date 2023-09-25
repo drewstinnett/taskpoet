@@ -21,7 +21,7 @@ var getCompleteCmd = &cobra.Command{
 		var results []taskpoet.Task
 		var err error
 		results, err = localClient.Task.List("/completed")
-		CheckErr(err)
+		checkErr(err)
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Added.Before(results[j].Added)
 		})
@@ -32,7 +32,7 @@ var getCompleteCmd = &cobra.Command{
 			row := []string{fmt.Sprintf("%v", task.ID[0:5]), task.Description, humanize.Time(*task.Completed), fmt.Sprintf("%+v", task.Tags)}
 			data = append(data, row)
 		}
-		pterm.DefaultTable.WithHasHeader().WithData(data).Render()
+		checkErr(pterm.DefaultTable.WithHasHeader().WithData(data).Render())
 	},
 }
 

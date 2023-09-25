@@ -23,7 +23,7 @@ actual TODO list`,
 			Completed:   &now,
 		}
 		found, err := localClient.Task.Add(t, taskDefaults)
-		CheckErr(err)
+		checkErr(err)
 		log.Printf("Logged Task: '%v'", found.Description)
 	},
 }

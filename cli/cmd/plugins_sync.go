@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	// Include all plugins
 	_ "github.com/drewstinnett/taskpoet/plugins/task/all"
 	"github.com/spf13/cobra"
 )
@@ -16,12 +17,12 @@ var syncCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("sync called")
 		ps, err := localClient.Task.GetPlugins()
-		CheckErr(err)
+		checkErr(err)
 		for name, c := range ps {
 			log.Printf("%+v %+v\n", name, c)
 			p := c()
 			err := localClient.Task.SyncPlugin(p)
-			CheckErr(err)
+			checkErr(err)
 		}
 	},
 }

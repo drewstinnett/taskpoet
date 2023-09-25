@@ -1,3 +1,6 @@
+/*
+Package cmd is the command line utility
+*/
 package cmd
 
 import (
@@ -15,21 +18,23 @@ import (
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
-var namespace string
-var localClient *taskpoet.LocalClient
-var Verbose bool
-var dbConfig *taskpoet.DBConfig
-var taskDefaults *taskpoet.Task
+var (
+	cfgFile      string
+	namespace    string
+	localClient  *taskpoet.Poet
+	verbose      bool
+	dbConfig     *taskpoet.DBConfig
+	taskDefaults *taskpoet.Task
+)
 
 // rootCmd represents the base command when called without any subcommands
-//var rootCmd *cobra.Command
+// var rootCmd *cobra.Command
 
-//var rootCmd = &cobra.Command{
+// NewRootCmd is the root command generator
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "taskpoet",
-		Short: "Do task tracking similiar to the olden ways of TaskWarrior",
+		Short: "Do task tracking similar to the olden ways of TaskWarrior",
 		Long: `Designed to be similar to TaskWarrior, with some updated features, and specifics
 around the Tom Limoncelli methods to task management.
 
@@ -43,7 +48,7 @@ Effort/Impact Assessment, based on Limoncelli concept
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if Verbose {
+			if verbose {
 				log.SetLevel(log.DebugLevel)
 			}
 		},
@@ -55,9 +60,8 @@ var rootCmd = NewRootCmd()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-
 func Execute() {
-	//rootCmd := NewRootCmd()
+	// rootCmd := NewRootCmd()
 
 	cmd, _, err := rootCmd.Find(os.Args[1:])
 	// default cmd if no cmd is given
@@ -71,13 +75,12 @@ func Execute() {
 		os.Exit(1)
 	}
 
-	//cobra.CheckErr(rootCmd.Execute())
+	// cobra.CheckErr(rootCmd.Execute())
 }
 
-//var rootCmd *cobra.Command
-
+// var rootCmd *cobra.Command
 func init() {
-	//rootCmd = NewRootCmd()
+	// rootCmd = NewRootCmd()
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
@@ -86,7 +89,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "Verbose logging")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose logging")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -112,7 +115,7 @@ func initConfig() {
 	var err error
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
+	if cerr := viper.ReadInConfig(); cerr == nil {
 		log.Debugln("Using config file:", viper.ConfigFileUsed())
 	}
 	// Configuration for DB
@@ -121,10 +124,10 @@ func initConfig() {
 	log.Debug("Using DB at: ", dbPath)
 
 	err = taskpoet.InitDB(dbConfig)
-	CheckErr(err)
+	checkErr(err)
 
 	localClient, err = taskpoet.NewLocalClient(dbConfig)
-	CheckErr(err)
+	checkErr(err)
 
 	// Declare defaults
 	taskDefaults = &taskpoet.Task{}
@@ -132,13 +135,13 @@ func initConfig() {
 	if defaultDue != "" {
 		now := time.Now()
 		dueDuration, err := taskpoet.ParseDuration(defaultDue)
-		CheckErr(err)
+		checkErr(err)
 		due := now.Add(dueDuration)
 		taskDefaults.Due = &due
 	}
 }
 
-func CheckErr(err error) {
+func checkErr(err error) {
 	if err != nil {
 		log.Fatalln(err)
 	}

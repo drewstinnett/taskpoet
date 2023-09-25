@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,8 +11,9 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-var (
-	docStyle = lipgloss.NewStyle().Margin(1, 2)
+var docStyle = lipgloss.NewStyle().Margin(1, 2)
+
+/*
 	appStyle = lipgloss.NewStyle().Padding(1, 2)
 
 	titleStyle = lipgloss.NewStyle().
@@ -24,7 +24,7 @@ var (
 	statusMessageStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#04B575"}).
 				Render
-)
+*/
 
 type model struct {
 	// choices  []string
@@ -32,10 +32,10 @@ type model struct {
 	// cursor   int
 	// selected map[int]struct{}
 
-	client *taskpoet.LocalClient
+	client *taskpoet.Poet
 }
 
-func initialModel(l *taskpoet.LocalClient) model {
+func initialModel(l *taskpoet.Poet) model {
 	m := model{
 		client: l,
 	}
@@ -48,7 +48,7 @@ func initialModel(l *taskpoet.LocalClient) model {
 		// m.list = append(m.choices, r.Description)
 		ti := taskItem{
 			title:       r.Description,
-			description: fmt.Sprintf("Due: %v Age: %v", humanize.Time(*r.Due), humanize.Time(*&r.Added)),
+			description: fmt.Sprintf("Due: %v Age: %v", humanize.Time(*r.Due), humanize.Time(r.Added)),
 		}
 		tasks = append(tasks, ti)
 		m.list = list.NewModel(tasks, list.NewDefaultDelegate(), 0, 0)
@@ -88,11 +88,13 @@ func (m model) View() string {
 	return docStyle.Render(m.list.View())
 }
 
-func NewUI(l *taskpoet.LocalClient) *tea.Program {
+// NewUI returns a new instance of the UI
+func NewUI(l *taskpoet.Poet) *tea.Program {
 	p := tea.NewProgram(initialModel(l), tea.WithAltScreen())
 	return p
 }
 
+/*
 type listKeyMap struct {
 	toggleSpinner    key.Binding
 	toggleTitleBar   key.Binding
@@ -130,3 +132,4 @@ func newListKeyMap() *listKeyMap {
 		),
 	}
 }
+*/

@@ -36,6 +36,6 @@ func TestTable(t *testing.T) {
 	require.NoError(t, err)
 	_, err = p.Task.Add(&Task{Description: "foo"}, nil)
 	require.NoError(t, err)
-	got := p.TaskTable("/active", nil)
+	got := p.TaskTable("/active", FilterParams{})
 	require.Contains(t, got, "foo")
 }

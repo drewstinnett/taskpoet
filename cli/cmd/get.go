@@ -33,7 +33,7 @@ func NewGetCmd() *cobra.Command {
 				Regex: re,
 				Limit: limit,
 			}
-			table := localClient.TaskTable("/active", fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			table := localClient.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
 			fmt.Print(table)
 
 			/*

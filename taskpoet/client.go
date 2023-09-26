@@ -162,7 +162,7 @@ var (
 )
 
 // TaskTable returns a table of the given tasks
-func (p *Poet) TaskTable(prefix string, fp *FilterParams, filters ...Filter) string {
+func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
 	w, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		fmt.Fprint(os.Stderr, "unable to calculate height and width of terminal")
@@ -172,7 +172,7 @@ func (p *Poet) TaskTable(prefix string, fp *FilterParams, filters ...Filter) str
 		panic(err)
 	}
 	sort.Sort(tasks)
-	tasks = ApplyFilters(tasks, fp, filters...)
+	tasks = ApplyFilters(tasks, &fp, filters...)
 
 	allTasksLen := len(tasks)
 	if fp.Limit > 0 {

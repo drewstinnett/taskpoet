@@ -1,15 +1,19 @@
-package example_plugin
+/*
+Package exampleplugin is an example plugin
+*/
+package exampleplugin
 
 import (
+	"log/slog"
+
 	"github.com/drewstinnett/taskpoet/taskpoet"
-	log "github.com/sirupsen/logrus"
 )
 
-type Example struct {
-}
+// Example thing
+type Example struct{}
 
+// Sync thing
 func (p *Example) Sync() ([]taskpoet.Task, error) {
-
 	ts := []taskpoet.Task{
 		{
 			Description: "Fist Synced Task",
@@ -20,16 +24,17 @@ func (p *Example) Sync() ([]taskpoet.Task, error) {
 			PluginID:    "EXAMPLE-2",
 		},
 	}
-	log.Debug("Syncing tasks: ", ts)
+	slog.Debug("Syncing tasks", "tasks", ts)
 
 	return ts, nil
-
 }
 
+// ExampleConfig thing thingy
 func (p *Example) ExampleConfig() string {
 	return "# No configuration yet"
 }
 
+// Description thing
 func (p *Example) Description() string {
 	return "This is meant to be a little structure to help you create your own Task Plugin"
 }

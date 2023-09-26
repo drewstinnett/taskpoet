@@ -13,9 +13,9 @@ var describeCmd = &cobra.Command{
 	Aliases: []string{"desc", "d"},
 	Run: func(cmd *cobra.Command, args []string) {
 		task, err := localClient.Task.GetWithPartialID(args[0], "", "")
-		CheckErr(err)
+		checkErr(err)
 		err = localClient.Task.Describe(task)
-		CheckErr(err)
+		checkErr(err)
 	},
 }
 

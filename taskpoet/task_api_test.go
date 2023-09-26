@@ -33,7 +33,7 @@ func TestActiveRoute(t *testing.T) {
 
 	assert.Equal(t, 200, w.Code)
 	var apir taskpoet.APITaskResponse
-	//var tasks []taskpoet.Task
+	// var tasks []taskpoet.Task
 	err = json.Unmarshal(w.Body.Bytes(), &apir)
 	if err != nil {
 		t.Error(err)
@@ -50,7 +50,6 @@ func TestActiveRoute(t *testing.T) {
 		t.Error(err)
 	}
 	assert.Equal(t, apir.Pagination.HasMore, false)
-
 }
 
 func TestCompleted(t *testing.T) {
@@ -77,18 +76,16 @@ func TestCompleted(t *testing.T) {
 
 	assert.Equal(t, 200, w.Code)
 	var apir taskpoet.APITaskResponse
-	//var tasks []taskpoet.Task
+	// var tasks []taskpoet.Task
 	err = json.Unmarshal(w.Body.Bytes(), &apir)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.Equal(t, apir.Data[0].Description, "foo-completed")
 	assert.Equal(t, apir.Pagination.HasMore, true)
-
 }
 
 func TestIncludeIssues(t *testing.T) {
-
 	// Make sure include_completed not set to bool errors
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v1/tasks?include_completed=foo", nil)
@@ -106,11 +103,9 @@ func TestIncludeIssues(t *testing.T) {
 	req, _ = http.NewRequest("GET", "/v1/tasks?include_active=false&include_completed=false", nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 500, w.Code)
-
 }
 
 func TestAddTask(t *testing.T) {
-
 	// Make sure include_completed not set to bool errors
 	task := taskpoet.Task{
 		ID:          "foo",
@@ -124,7 +119,6 @@ func TestAddTask(t *testing.T) {
 }
 
 func TestAddInvalidTask(t *testing.T) {
-
 	// Make sure include_completed not set to bool errors
 	task := taskpoet.Task{}
 	taskB, _ := json.Marshal(task)

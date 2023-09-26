@@ -10,10 +10,15 @@ package taskpoet
 */
 
 const (
+	// EffortImpactUnset is undefined EI
 	EffortImpactUnset = iota
+	// EffortImpactHigh is the highest
 	EffortImpactHigh
+	// EffortImpactMedium is medium
 	EffortImpactMedium
+	// EffortImpactLow is low
 	EffortImpactLow
+	// EffortImpactAvoid means stay away!
 	EffortImpactAvoid
 )
 
@@ -25,6 +30,7 @@ var effortImpactText = map[int]string{
 	EffortImpactAvoid:  "High Effort, Low Impact",
 }
 
+// EffortImpactText returns text from the code
 func EffortImpactText(code int) string {
 	return effortImpactText[code]
 }

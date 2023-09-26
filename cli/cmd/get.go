@@ -2,21 +2,15 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
-	"sort"
 	"strings"
-	"time"
 
-	. "github.com/ahmetb/go-linq/v3"
 	"github.com/drewstinnett/taskpoet/taskpoet"
-	"github.com/dustin/go-humanize"
-	"github.com/pterm/pterm"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-// getPendingCmd represents the getPending command
-//var getCmd = &cobra.Command{
+// NewGetCmd is the new get command
 func NewGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "active",
@@ -25,81 +19,34 @@ func NewGetCmd() *cobra.Command {
 		Long: `Get Active Tasks
 `,
 		Run: func(cmd *cobra.Command, args []string) {
-			var results []taskpoet.Task
-			var err error
-			var filter string
-
-			// Figure out the limit
-			limit, _ := cmd.PersistentFlags().GetInt("limit")
-
-			now := time.Now()
-			results, err = localClient.Task.List("/active")
-			CheckErr(err)
-			sort.Slice(results, func(i, j int) bool {
-				return results[i].Added.Before(results[j].Added)
-			})
+			limit, err := cmd.PersistentFlags().GetInt("limit")
+			checkErr(err)
 
 			var re *regexp.Regexp
 			if len(args) > 0 {
-				filter = fmt.Sprintf("(?i)%v", strings.Join(args, " "))
-				re = regexp.MustCompile(filter)
-				log.Debugf("Showing tasks that match '%v' regex", re)
+				re = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+				slog.Debug("Showing tasks that match", "regex", re)
+			} else {
+				re = regexp.MustCompile(".*")
 			}
-
-			data := make([][]string, 0)
-			data = append(data, []string{"ID", "Age", "Description", "Due", "Tags"})
-			for _, task := range results {
-				// Ignore things still hidden
-				if task.HideUntil != nil && task.HideUntil.After(now) {
-					continue
-				}
-				if filter != "" && !re.Match([]byte(task.Description)) {
-					continue
-				}
-				age := humanize.Time(task.Added)
-				var dueHR string
-				if task.Due != nil {
-					dueHR = humanize.Time(*task.Due)
-				} else {
-					dueHR = ""
-				}
-				var desc string
-				if task.PluginID != "builtin" {
-					desc = fmt.Sprintf("%v (%v)", task.Description, task.PluginID)
-				} else {
-					desc = task.Description
-				}
-				row := []string{fmt.Sprintf("%v", task.ShortID()), age, desc, dueHR, fmt.Sprintf("%+v", task.Tags)}
-				data = append(data, row)
+			fp := &taskpoet.FilterParams{
+				Regex: re,
+				Limit: limit,
 			}
-			page := make([][]string, 0)
+			table := localClient.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			fmt.Print(table)
 
-			From(data).Skip(0).Take(limit).ToSlice(&page)
-
-			//pterm.DefaultTable.WithHasHeader().WithData(data).Render()
-			pterm.DefaultTable.WithHasHeader().WithData(page).Render()
-
-			if limit < len(data) {
-				log.Warningf("%v more records to display, increase the limit to see it", len(data)-limit)
-			}
+			/*
+				if limit < len(tasks) {
+					slog.Warn("more records to display, increase the limit to see it", "n-more", len(tasks)-limit)
+				}
+			*/
 		},
 	}
+	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
 	return cmd
 }
 
-var getCmd = NewGetCmd()
-
 func init() {
-	rootCmd.AddCommand(getCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// getPendingCmd.PersistentFlags().String("foo", "", "A help for foo")
-	getCmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// getPendingCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.AddCommand(NewGetCmd())
 }

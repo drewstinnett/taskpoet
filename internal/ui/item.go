@@ -1,3 +1,6 @@
+/*
+Package ui is the user interface
+*/
 package ui
 
 type taskItem struct {

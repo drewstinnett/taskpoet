@@ -1,7 +1,7 @@
 package taskpoet_test
 
 import (
-	"io/ioutil"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -10,21 +10,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert/v2"
 	"github.com/pterm/pterm"
-	log "github.com/sirupsen/logrus"
 )
 
 // Local Client for lookups
-var lc *taskpoet.LocalClient
-var emptyDefaults taskpoet.Task
-var router *gin.Engine
-var dbConfig *taskpoet.DBConfig
+var (
+	lc            *taskpoet.Poet
+	emptyDefaults taskpoet.Task
+	router        *gin.Engine
+	testDBPath    string
+	// dbConfig      *taskpoet.DBConfig
+)
 
 func setup() {
 	// Init a db
-	tmpfile, _ := ioutil.TempFile("", "taskpoet.*.db")
-	dbConfig = &taskpoet.DBConfig{Path: tmpfile.Name()}
-	_ = taskpoet.InitDB(dbConfig)
-	lc, _ = taskpoet.NewLocalClient(dbConfig)
+	tmpfile, err := os.CreateTemp("", "taskpoet.*.db")
+	panicIfErr(err)
+	testDBPath = tmpfile.Name()
+	lc, err = taskpoet.New(taskpoet.WithDatabasePath(testDBPath))
+	panicIfErr(err)
 	emptyDefaults = taskpoet.Task{}
 
 	// Init Router
@@ -32,14 +35,12 @@ func setup() {
 		LocalClient: lc,
 	}
 	router = taskpoet.NewRouter(rc)
-	//router = taskpoet.NewRouter(nil)
-
-	// Populate with some various tasks to filter on
 }
+
 func shutdown() {
-	err := os.Remove(dbConfig.Path)
+	err := os.Remove(testDBPath)
 	if err != nil {
-		log.Warning("Could not remove ", dbConfig.Path)
+		fmt.Fprintf(os.Stderr, "Could not remove:%v ", testDBPath)
 	}
 }
 
@@ -97,7 +98,6 @@ func TestValidate(t *testing.T) {
 }
 
 func TestLogTask(t *testing.T) {
-
 	_, err := lc.Task.Log(&taskpoet.Task{ID: "log-this-task", Description: "foo"}, &emptyDefaults)
 	if err != nil {
 		t.Error(err)
@@ -106,11 +106,9 @@ func TestLogTask(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
 }
 
 func TestCompleteTask(t *testing.T) {
-
 	task, err := lc.Task.Add(&taskpoet.Task{Description: "soon-to-complete-task"}, &emptyDefaults)
 	if err != nil {
 		t.Error(err)
@@ -132,7 +130,6 @@ func TestCompleteTask(t *testing.T) {
 	if err != nil {
 		t.Errorf("When completing a task, the /completed id is not created")
 	}
-
 }
 
 func TestBlankDescription(t *testing.T) {
@@ -159,7 +156,7 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "fakeid" {
-		t.Errorf("Expected to retrive 'fakeid' but got %v", task.ID)
+		t.Errorf("Expected to retrieve 'fakeid' but got %v", task.ID)
 	}
 
 	// Test for a non-unique partial
@@ -168,12 +165,11 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
-	// Test for a non existant prefix
+	// Test for a non existent prefix
 	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
-		t.Error("Tried to match on a non existant partial id, but did not error")
+		t.Error("Tried to match on a non existent partial id, but did not error")
 	}
-
 }
 
 func TestDefaults(t *testing.T) {
@@ -190,10 +186,9 @@ func TestDefaults(t *testing.T) {
 	if task.Due != &duration {
 		t.Error("Default setting of Due did not work")
 	}
-
 }
 
-//func TestGetByID(t *testing.T) {
+// func TestGetByID(t *testing.T) {
 func TestGetByExactPath(t *testing.T) {
 	ts := []taskpoet.Task{
 		{Description: "foo", ID: "id-stay-active"},
@@ -216,7 +211,6 @@ func TestGetByExactPath(t *testing.T) {
 	if err != nil {
 		t.Errorf("Could not GetByID for id-in-completed")
 	}
-
 }
 
 func TestDuplicateIDs(t *testing.T) {
@@ -243,7 +237,6 @@ func TestDuplicateIDs(t *testing.T) {
 	if err != nil {
 		t.Error("Creating a duplicate ID with Plugin presented an error")
 	}
-
 }
 
 func TestGetByExactID(t *testing.T) {
@@ -261,14 +254,13 @@ func TestGetByExactID(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "another_fakeid-exact" {
-		t.Errorf("Expected to retrive 'another_fakeid-exact' but got %v", task.ID)
+		t.Errorf("Expected to retrieve 'another_fakeid-exact' but got %v", task.ID)
 	}
 
 	_, err = lc.Task.GetWithID("another", "", activePrefix)
 	if err == nil {
 		t.Error("Did not error when checking for an exact id that does not exist")
 	}
-
 }
 
 func TestListNonExistant(t *testing.T) {
@@ -277,7 +269,7 @@ func TestListNonExistant(t *testing.T) {
 		t.Error(err)
 	}
 	if len(r) != 0 {
-		t.Errorf("Did not return an empty list when listing a non existant prefix")
+		t.Errorf("Did not return an empty list when listing a non existent prefix")
 	}
 }
 
@@ -318,7 +310,6 @@ func TestTaskSelfAddParent(t *testing.T) {
 	if err == nil {
 		t.Error("Adding the a task as it's own parent did not return an error")
 	}
-
 }
 
 func TestTaskSelfAddChildren(t *testing.T) {
@@ -330,7 +321,6 @@ func TestTaskSelfAddChildren(t *testing.T) {
 	if err == nil {
 		t.Error("Adding the a task as it's own children did not return an error")
 	}
-
 }
 
 func TestShortID(t *testing.T) {
@@ -348,14 +338,13 @@ func TestShortID(t *testing.T) {
 	if long.ShortID() != "foo-b" {
 		t.Errorf("Short ID for %v did not return 'foo-b'", long.ID)
 	}
-
 }
 
 func TestEditNonExisting(t *testing.T) {
 	task := &taskpoet.Task{ID: "non-existing-edit"}
 	_, err := lc.Task.Edit(task)
 	if err == nil {
-		t.Error("No error on editing a non existant task")
+		t.Error("No error on editing a non existent task")
 	}
 }
 
@@ -404,7 +393,6 @@ func TestEditDescription(t *testing.T) {
 	if edited.Description != "New" {
 		t.Error("Failed editing new description in Task")
 	}
-
 }
 
 func TestEditSet(t *testing.T) {
@@ -427,8 +415,8 @@ func TestEditSet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
 }
+
 func TestAddParentFunc(t *testing.T) {
 	tasks := []taskpoet.Task{
 		{ID: "kid-func", Description: "Kid task"},
@@ -461,7 +449,6 @@ func TestAddParentFunc(t *testing.T) {
 	if !taskpoet.ContainsString(parent.Children, kid.ID) {
 		t.Error("Setting parent did not also set child on parent resource")
 	}
-
 }
 
 func TestAddChildFunc(t *testing.T) {
@@ -496,7 +483,6 @@ func TestAddChildFunc(t *testing.T) {
 	if !taskpoet.ContainsString(parent.Children, kid.ID) {
 		t.Error("Setting parent did not also set child on parent resource")
 	}
-
 }
 
 func TestGetByPartialID(t *testing.T) {
@@ -513,7 +499,7 @@ func TestGetByPartialID(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	} else if task.ID != "partial-id-test-2" {
-		t.Errorf("Expected to retrive 'partial-id-test-2' but got %v", task.ID)
+		t.Errorf("Expected to retrieve 'partial-id-test-2' but got %v", task.ID)
 	}
 
 	// Test for a non-unique partial
@@ -522,12 +508,11 @@ func TestGetByPartialID(t *testing.T) {
 		t.Error("Tried to get a partial that has duplicates, but got no error")
 	}
 
-	// Test for a non existant prefix
+	// Test for a non existent prefix
 	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	if err == nil {
-		t.Error("Tried to match on a non existant partial id, but did not error")
+		t.Error("Tried to match on a non existent partial id, but did not error")
 	}
-
 }
 
 func TestDescribe(t *testing.T) {
@@ -569,7 +554,6 @@ func TestDescribe(t *testing.T) {
 		HideUntil:   &wait,
 		Completed:   &completed,
 	})
-
 }
 
 func TestHideAfterDue(t *testing.T) {
@@ -614,11 +598,9 @@ func TestDeleteTask(t *testing.T) {
 	if err == nil {
 		t.Error("Got task we should have deleted")
 	}
-
 }
 
 func TestDetectKeyPath(t *testing.T) {
-
 	tests := []struct {
 		task   taskpoet.Task
 		wanted string
@@ -639,7 +621,6 @@ func TestDetectKeyPath(t *testing.T) {
 			t.Errorf("Failed DetectKeyPath, wanted %v but got %v", test.wanted, got)
 		}
 	}
-
 }
 
 func TestAddOrEditSet(t *testing.T) {
@@ -666,7 +647,6 @@ func TestAddOrEditSet(t *testing.T) {
 
 	assert.Equal(t, edited.Description, "Edited-desc")
 	assert.Equal(t, added.Description, "Added-desc")
-
 }
 
 func TestEditExistingValues(t *testing.T) {
@@ -690,5 +670,10 @@ func TestEditExistingValues(t *testing.T) {
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
 
 	assert.Equal(t, false, edited.Added.IsZero())
+}
 
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

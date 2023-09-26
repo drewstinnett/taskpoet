@@ -26,7 +26,6 @@ var (
 				response = versionOutput.ToJSON()
 			}
 			fmt.Printf("%+v", response)
-			return
 		},
 	}
 )

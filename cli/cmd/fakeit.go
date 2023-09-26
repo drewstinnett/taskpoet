@@ -22,10 +22,10 @@ var fakeitCmd = &cobra.Command{
 		log.Println("Generating TODO tasks")
 		for i := 0; i < 100; i++ {
 			desc, err := faker.GetLorem().Sentence(reflect.Value{})
-			CheckErr(err)
+			checkErr(err)
 
 			t := taskpoet.Task{
-				//Description: fmt.Sprintf("Task number %v", i),
+				// Description: fmt.Sprintf("Task number %v", i),
 				Description: desc.(string),
 				Due:         randomDueDate(),
 				Added:       randomAddedDate(),
@@ -33,16 +33,16 @@ var fakeitCmd = &cobra.Command{
 			ts = append(ts, t)
 		}
 		err := localClient.Task.AddSet(ts, nil)
-		CheckErr(err)
+		checkErr(err)
 
 		log.Println("Generating completed tasks")
 		var tsl []taskpoet.Task
 		for i := 0; i < 100; i++ {
-			desc, err := faker.GetLorem().Sentence(reflect.Value{})
-			CheckErr(err)
+			desc, serr := faker.GetLorem().Sentence(reflect.Value{})
+			checkErr(serr)
 
 			t := taskpoet.Task{
-				//Description: fmt.Sprintf("Task number %v", i),
+				// Description: fmt.Sprintf("Task number %v", i),
 				Description: desc.(string),
 				Added:       randomAddedDate(),
 				Completed:   randomCompletedDate(),
@@ -50,7 +50,7 @@ var fakeitCmd = &cobra.Command{
 			tsl = append(tsl, t)
 		}
 		err = localClient.Task.AddSet(tsl, nil)
-		CheckErr(err)
+		checkErr(err)
 	},
 }
 
@@ -69,13 +69,13 @@ func init() {
 }
 
 func randomDueDate() *time.Time {
-	//min := time.Date(1970, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
+	// min := time.Date(1970, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
 	now := time.Now()
 	min := now.Unix()
 	max := time.Date(2070, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	r := time.Unix(sec, 0)
 	return &r
 }
@@ -85,7 +85,7 @@ func randomAddedDate() time.Time {
 	max := time.Now().Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	return time.Unix(sec, 0)
 }
 
@@ -94,7 +94,7 @@ func randomCompletedDate() *time.Time {
 	max := time.Now().Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	r := time.Unix(sec, 0)
 	return &r
 }

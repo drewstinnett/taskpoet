@@ -1,38 +1,41 @@
-package taskpoet_test
+package taskpoet
 
 import (
-	"io/ioutil"
 	"log"
+	"os"
 	"testing"
 
-	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
 
 func TestInitDB(t *testing.T) {
-
-	tmpfile, _ := ioutil.TempFile("", "taskpoet.*.db")
+	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
 	log.Println(tmpfile.Name())
 
-	dbConfig := &taskpoet.DBConfig{Path: tmpfile.Name()}
-	err := taskpoet.InitDB(dbConfig)
-	if err != nil {
-		t.Error("Error initializing database test: ", err)
-	}
-
-	localClient, err := taskpoet.NewLocalClient(dbConfig)
-	if err != nil {
-		t.Error("Could not get db we just created: ", err)
-	}
-	err = localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(localClient.Task.BucketName()))
-		if bucket == nil {
-			t.Error("Could not get the task bucket on the new db")
-		}
+	lc, err := New(WithDatabasePath(tmpfile.Name()))
+	require.NoError(t, err)
+	err = lc.DB.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(lc.Task.BucketName()))
+		require.NotNil(t, bucket)
 		return nil
 	})
-	if err != nil {
-		t.Error("Error looking up bucket: ", err)
-	}
+	require.NoError(t, err)
+}
 
+func TestNew(t *testing.T) {
+	got, err := New(WithNamespace("foo"))
+	require.NotNil(t, got)
+	require.NoError(t, err)
+	require.Equal(t, "foo", got.Namespace)
+}
+
+func TestTable(t *testing.T) {
+	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
+	p, err := New(WithDatabasePath(tmpfile.Name()))
+	require.NoError(t, err)
+	_, err = p.Task.Add(&Task{Description: "foo"}, nil)
+	require.NoError(t, err)
+	got := p.TaskTable("/active", FilterParams{})
+	require.Contains(t, got, "foo")
 }

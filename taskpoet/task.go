@@ -685,54 +685,6 @@ func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
 	return t, nil
 }
 
-/*func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
-	// t is the new task
-	// d are the defaults
-	if t.Description == "" {
-		return nil, fmt.Errorf("Missing description for Task")
-	}
-	now := time.Now()
-	if t.Added.IsZero() {
-		t.Added = now
-	}
-
-	// If no ID is set, just generate one
-	if t.ID == "" {
-		t.ID = fmt.Sprintf(uuid.New().String())
-	}
-
-	// Handle defaults due
-	if d != nil {
-		if t.Due == nil && d.Due != nil {
-			t.Due = d.Due
-		}
-	}
-	taskSerial, err := json.Marshal(t)
-	if err != nil {
-		return nil, err
-	}
-
-	// Is this a new active task, or just logging completed?
-	var keyPath string
-	if t.Completed == nil {
-		keyPath = fmt.Sprintf("/active/%s", t.ID)
-	} else {
-		keyPath = fmt.Sprintf("/completed/%s", t.ID)
-	}
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = bucket.Put([]byte(keyPath), taskSerial)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
-	return t, nil
-
-}
-*/
-
 // GetIDsByPrefix returns a list of ids matching the given prefix
 func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	allIDs := []string{}

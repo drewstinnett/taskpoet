@@ -29,3 +29,13 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "foo", got.Namespace)
 }
+
+func TestTable(t *testing.T) {
+	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
+	p, err := New(WithDatabasePath(tmpfile.Name()))
+	require.NoError(t, err)
+	_, err = p.Task.Add(&Task{Description: "foo"}, nil)
+	require.NoError(t, err)
+	got := p.TaskTable("/active", nil)
+	require.Contains(t, got, "foo")
+}

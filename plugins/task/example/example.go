@@ -4,8 +4,9 @@ Package exampleplugin is an example plugin
 package exampleplugin
 
 import (
+	"log/slog"
+
 	"github.com/drewstinnett/taskpoet/taskpoet"
-	log "github.com/sirupsen/logrus"
 )
 
 // Example thing
@@ -23,7 +24,7 @@ func (p *Example) Sync() ([]taskpoet.Task, error) {
 			PluginID:    "EXAMPLE-2",
 		},
 	}
-	log.Debug("Syncing tasks: ", ts)
+	slog.Debug("Syncing tasks", "tasks", ts)
 
 	return ts, nil
 }

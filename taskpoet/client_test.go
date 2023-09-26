@@ -13,26 +13,14 @@ func TestInitDB(t *testing.T) {
 	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
 	log.Println(tmpfile.Name())
 
-	dbConfig := &DBConfig{Path: tmpfile.Name()}
-	err := InitDB(dbConfig)
-	if err != nil {
-		t.Error("Error initializing database test: ", err)
-	}
-
-	localClient, err := NewLocalClient(dbConfig)
-	if err != nil {
-		t.Error("Could not get db we just created: ", err)
-	}
-	err = localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(localClient.Task.BucketName()))
-		if bucket == nil {
-			t.Error("Could not get the task bucket on the new db")
-		}
+	lc, err := New(WithDatabasePath(tmpfile.Name()))
+	require.NoError(t, err)
+	err = lc.DB.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(lc.Task.BucketName()))
+		require.NotNil(t, bucket)
 		return nil
 	})
-	if err != nil {
-		t.Error("Error looking up bucket: ", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestNew(t *testing.T) {

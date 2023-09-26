@@ -51,7 +51,7 @@ func initialModel(l *taskpoet.Poet) model {
 			description: fmt.Sprintf("Due: %v Age: %v", humanize.Time(*r.Due), humanize.Time(r.Added)),
 		}
 		tasks = append(tasks, ti)
-		m.list = list.NewModel(tasks, list.NewDefaultDelegate(), 0, 0)
+		m.list = list.New(tasks, list.NewDefaultDelegate(), 0, 0)
 		m.list.Title = "TODO Tasks"
 		/*
 			i := list.Item{

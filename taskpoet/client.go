@@ -5,7 +5,6 @@ package taskpoet
 
 import (
 	"errors"
-	"io"
 	"path"
 
 	"github.com/mitchellh/go-homedir"
@@ -29,7 +28,11 @@ func failure(err error) Option {
 
 // New returns a new poet object and optional error
 func New(options ...Option) (*Poet, error) {
-	p := &Poet{}
+	p := &Poet{
+		Namespace: "default",
+		dbPath:    path.Join(mustHomeDir(), ".taskpoet.db"),
+	}
+	// Default to homedir database
 	for _, option := range options {
 		opt, err := option()
 		if err != nil {
@@ -37,13 +40,42 @@ func New(options ...Option) (*Poet, error) {
 		}
 		opt(p)
 	}
+
+	var err error
+	p.DB, err = bolt.Open(p.dbPath, 0o600, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	p.Task = &TaskServiceOp{
+		localClient: p,
+	}
+
+	// InitDB
+	if err := p.initDB(); err != nil {
+		return nil, err
+	}
+
+	// Open the db
 	return p, nil
 }
 
+/*
 // DBConfig configures the database
 type DBConfig struct {
 	Path      string
 	Namespace string
+}
+*/
+
+// WithDatabasePath gives the Poet a path to a database file
+func WithDatabasePath(s string) Option {
+	if s != "" {
+		return success(func(p *Poet) {
+			p.dbPath = s
+		})
+	}
+	return success(func(p *Poet) {})
 }
 
 // WithNamespace passes a namespace in to the new Poet object
@@ -61,73 +93,38 @@ type Poet struct {
 	DB        *bolt.DB
 	Namespace string
 	Task      TaskService
+	dbPath    string
 }
 
-// NewLocalClient returns a new poet the old way
-// Deprecated: Use New with functional options instead
-func NewLocalClient(c *DBConfig) (*Poet, error) {
-	var dbPath string
-	if c.Path == "" {
-		h, _ := homedir.Dir()
-		dbPath = path.Join(h, ".taskpoet.db")
-	} else {
-		dbPath = c.Path
-	}
-
-	var namespace string
-	if c.Namespace == "" {
-		namespace = "default"
-	} else {
-		namespace = c.Namespace
-	}
-
-	// Make a full path
-	db, err := bolt.Open(dbPath, 0o600, nil)
-	// defer db.Close()
-	if err != nil {
-		return nil, err
-	}
-	lc := Poet{
-		DB:        db,
-		Namespace: namespace,
-	}
-	lc.Task = &TaskServiceOp{
-		localClient: &lc,
-	}
-	// New database is here
-	return &lc, nil
-}
-
-// InitDB initializes the database
-func InitDB(c *DBConfig) error {
-	localClient, err := NewLocalClient(c)
-	if err != nil {
-		return err
-	}
-
+// initDB initializes the database
+func (p *Poet) initDB() error {
 	// store some data
-	err = localClient.DB.Update(func(tx *bolt.Tx) error {
+	return p.DB.Update(func(tx *bolt.Tx) error {
 		// localClient.
-		bucket := tx.Bucket([]byte(localClient.Task.BucketName()))
+		bucket := tx.Bucket([]byte(p.Task.BucketName()))
 		if bucket == nil {
-			_, berr := tx.CreateBucket([]byte(localClient.Task.BucketName()))
+			_, berr := tx.CreateBucket([]byte(p.Task.BucketName()))
 			if berr != nil {
 				return berr
 			}
 		}
 		return nil
 	})
-	defer dclose(localClient.DB)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
+/*
 func dclose(c io.Closer) {
 	err := c.Close()
 	if err != nil {
 		panic(err)
 	}
+}
+*/
+
+func mustHomeDir() string {
+	h, err := homedir.Dir()
+	if err != nil {
+		panic(err)
+	}
+	return h
 }

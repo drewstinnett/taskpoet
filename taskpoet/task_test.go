@@ -1,7 +1,7 @@
 package taskpoet_test
 
 import (
-	"io/ioutil"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert/v2"
 	"github.com/pterm/pterm"
-	log "github.com/sirupsen/logrus"
 )
 
 // Local Client for lookups
@@ -18,15 +17,17 @@ var (
 	lc            *taskpoet.Poet
 	emptyDefaults taskpoet.Task
 	router        *gin.Engine
-	dbConfig      *taskpoet.DBConfig
+	testDBPath    string
+	// dbConfig      *taskpoet.DBConfig
 )
 
 func setup() {
 	// Init a db
-	tmpfile, _ := ioutil.TempFile("", "taskpoet.*.db")
-	dbConfig = &taskpoet.DBConfig{Path: tmpfile.Name()}
-	_ = taskpoet.InitDB(dbConfig)
-	lc, _ = taskpoet.NewLocalClient(dbConfig)
+	tmpfile, err := os.CreateTemp("", "taskpoet.*.db")
+	panicIfErr(err)
+	testDBPath = tmpfile.Name()
+	lc, err = taskpoet.New(taskpoet.WithDatabasePath(testDBPath))
+	panicIfErr(err)
 	emptyDefaults = taskpoet.Task{}
 
 	// Init Router
@@ -34,15 +35,12 @@ func setup() {
 		LocalClient: lc,
 	}
 	router = taskpoet.NewRouter(rc)
-	// router = taskpoet.NewRouter(nil)
-
-	// Populate with some various tasks to filter on
 }
 
 func shutdown() {
-	err := os.Remove(dbConfig.Path)
+	err := os.Remove(testDBPath)
 	if err != nil {
-		log.Warning("Could not remove ", dbConfig.Path)
+		fmt.Fprintf(os.Stderr, "Could not remove:%v ", testDBPath)
 	}
 }
 
@@ -672,4 +670,10 @@ func TestEditExistingValues(t *testing.T) {
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
 
 	assert.Equal(t, false, edited.Added.IsZero())
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

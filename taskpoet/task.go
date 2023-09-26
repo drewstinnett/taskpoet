@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
-	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -32,13 +31,31 @@ type Task struct {
 	Tags         []string   `json:"tags,omitempty"`
 }
 
+// Tasks represents multiple Task items
+type Tasks []Task
+
+// Len helps to satisfy the sort interface
+func (t Tasks) Len() int {
+	return len(t)
+}
+
+// Swap helps to satisfy the sort interface
+func (t Tasks) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+}
+
+// Less helps to satisfy the sort interface
+func (t Tasks) Less(i, j int) bool {
+	return t[i].Added.Before(t[j].Added)
+}
+
 // DetectKeyPath finds the key path for a given task
 func (t *Task) DetectKeyPath() []byte {
 	// Is this a new active task, or just logging completed?
 	var keyPath string
 	var pluginID string
 	if t.PluginID == "" {
-		pluginID = defaultPluginID
+		pluginID = DefaultPluginID
 	} else {
 		pluginID = t.PluginID
 	}
@@ -65,7 +82,7 @@ func (t *Task) setDefaults(d *Task) {
 
 	// Set the plugin id to default if not set
 	if t.PluginID == "" {
-		t.PluginID = defaultPluginID
+		t.PluginID = DefaultPluginID
 	}
 	// Handle defaults due
 	if d != nil {
@@ -131,7 +148,7 @@ type TaskService interface {
 	Log(t, d *Task) (*Task, error)
 
 	// This on prolly needs work
-	List(prefix string) ([]Task, error)
+	List(prefix string) (Tasks, error)
 	/*
 	   Path Conventions
 	   /${state}/${plugin-id}/${id}
@@ -181,7 +198,6 @@ func (svc *TaskServiceOp) SyncPlugin(tp TaskPlugin) error {
 	if err != nil {
 		return err
 	}
-	log.Println(ts)
 	return nil
 }
 
@@ -298,7 +314,6 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error { //nolint:funlen,gocognit
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		for _, t := range mergedTasks {
 			taskSerial, err := json.Marshal(t)
-			log.Warning(t)
 			if err != nil {
 				return err
 			}
@@ -476,7 +491,8 @@ type TaskServiceOp struct {
 	// plugins     []TaskPlugin
 }
 
-const defaultPluginID string = "builtin"
+// DefaultPluginID is just the string used as the built in plugin default
+const DefaultPluginID string = "builtin"
 
 // GetWithPartialID returns using a partial id of the task
 func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*Task, error) {
@@ -488,7 +504,7 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 	}
 	matches := []string{}
 	if pluginID == "" {
-		pluginID = defaultPluginID
+		pluginID = DefaultPluginID
 	}
 	qualifiedPartialID := filepath.Join(pluginID, partialID)
 	for _, prefix := range possibleStates {
@@ -541,7 +557,7 @@ func (svc *TaskServiceOp) GetWithExactPath(path []byte) (*Task, error) {
 func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 	var possibleKeypaths []string
 	if pluginID == "" {
-		pluginID = defaultPluginID
+		pluginID = DefaultPluginID
 	}
 
 	if state != "" {
@@ -585,8 +601,8 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 }
 
 // List lists items under a given prefix
-func (svc *TaskServiceOp) List(prefix string) ([]Task, error) {
-	var tasks []Task
+func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
+	var tasks Tasks
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err := b.ForEach(func(k, v []byte) error {
@@ -631,7 +647,6 @@ func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
 		task := task
 		_, err := svc.Add(&task, d)
 		if err != nil {
-			log.Debug("Error adding task in set", t)
 			return err
 		}
 	}

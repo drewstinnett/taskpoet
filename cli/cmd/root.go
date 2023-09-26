@@ -5,12 +5,13 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/lmittmann/tint"
+	"github.com/prometheus/common/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -19,12 +20,13 @@ import (
 )
 
 var (
-	cfgFile      string
-	namespace    string
-	localClient  *taskpoet.Poet
-	verbose      bool
-	dbConfig     *taskpoet.DBConfig
+	cfgFile     string
+	namespace   string
+	localClient *taskpoet.Poet
+	verbose     bool
+	// dbConfig     *taskpoet.DBConfig
 	taskDefaults *taskpoet.Task
+	// logger       *slog.Logger
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -48,9 +50,6 @@ Effort/Impact Assessment, based on Limoncelli concept
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if verbose {
-				log.SetLevel(log.DebugLevel)
-			}
 		},
 	}
 	return cmd
@@ -114,19 +113,23 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
 	var err error
 
+	// set global logger with custom options
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      level,
+			TimeFormat: time.Kitchen,
+		}),
+	))
+
 	// If a config file is found, read it in.
 	if cerr := viper.ReadInConfig(); cerr == nil {
-		log.Debugln("Using config file:", viper.ConfigFileUsed())
+		slog.Debug("Using config file", "file", viper.ConfigFileUsed())
 	}
-	// Configuration for DB
-	dbPath := viper.GetString("dbpath")
-	dbConfig = &taskpoet.DBConfig{Path: dbPath, Namespace: namespace}
-	log.Debug("Using DB at: ", dbPath)
-
-	err = taskpoet.InitDB(dbConfig)
-	checkErr(err)
-
-	localClient, err = taskpoet.NewLocalClient(dbConfig)
+	localClient, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
 	checkErr(err)
 
 	// Declare defaults

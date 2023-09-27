@@ -1,4 +1,8 @@
 ---
+before:
+  hooks:
+    - go mod tidy
+    - ./scripts/completions.sh
 builds:
   - env:
       - CGO_ENABLED=0
@@ -46,3 +50,8 @@ brews:
       Add the following in your ~/.zshrc or ~/.profile for faster typin':
 
         alias tp="#{opt_bin}/taskpoet"
+    install: |-
+      bin.install "taskpoet"
+      bash_completion.install "completions/taskpoet.bash" => "taskpoet"
+      zsh_completion.install "completions/taskpoet.zsh" => "_taskpoet"
+      fish_completion.install "completions/taskpoet.fish"

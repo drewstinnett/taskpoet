@@ -8,9 +8,9 @@ import (
 
 // completeCmd represents the complete command
 var completeCmd = &cobra.Command{
-	Use:     "complete TASK",
-	Short:   "Mark a task as complete",
-	Long:    `Mark a task as complete`,
+	Use:     "done TASK",
+	Short:   "Mark a task as done",
+	Long:    `Mark a task as done`,
 	Aliases: []string{"c"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

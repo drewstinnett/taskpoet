@@ -9,9 +9,10 @@ import (
 
 // debugCmd represents the debug command
 var debugCmd = &cobra.Command{
-	Use:   "debug",
-	Short: "Mostly just barf out the DB",
-	Long:  `Barf the DB to stdout for debugging purposes 🤮`,
+	Use:    "debug",
+	Short:  "Mostly just barf out the DB",
+	Long:   `Barf the DB to stdout for debugging purposes 🤮`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := poetC.DB.View(func(tx *bolt.Tx) error {
 			return tx.ForEach(func(bucketName []byte, bucket *bolt.Bucket) error {

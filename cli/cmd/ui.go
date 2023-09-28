@@ -10,8 +10,9 @@ import (
 
 // uiCmd represents the ui command
 var uiCmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Run the UI",
+	Use:    "ui",
+	Short:  "Run the UI",
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("ui called")
 		p := ui.NewUI(poetC)

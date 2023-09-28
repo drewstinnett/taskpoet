@@ -7,9 +7,10 @@ import (
 
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
-	Use:   "server",
-	Short: "Run http server",
-	Long:  `Run an http server capable of hosting an API as well as remote sync and stuff`,
+	Use:    "server",
+	Short:  "Run http server",
+	Long:   `Run an http server capable of hosting an API as well as remote sync and stuff`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		debug, _ := cmd.PersistentFlags().GetBool("debug")
 		c := &taskpoet.RouterConfig{

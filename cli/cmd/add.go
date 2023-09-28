@@ -72,7 +72,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 			t.HideUntil = &h
 		}
 
-		found, err := poetC.Task.Add(t, taskDefaults)
+		found, err := poetC.Task.Add(t)
 		checkErr(err)
 		if parentS != "" {
 			parent, err := poetC.Task.GetWithPartialID(parentS, "", "")

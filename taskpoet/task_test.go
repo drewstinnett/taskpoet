@@ -119,7 +119,7 @@ func TestLogTask(t *testing.T) {
 }
 
 func TestCompleteTask(t *testing.T) {
-	task, err := lc.Task.Add(&Task{Description: "soon-to-complete-task"}, &emptyDefaults)
+	task, err := lc.Task.Add(&Task{Description: "soon-to-complete-task"})
 	if err != nil {
 		t.Error(err)
 	}
@@ -143,7 +143,7 @@ func TestCompleteTask(t *testing.T) {
 }
 
 func TestBlankDescription(t *testing.T) {
-	_, err := lc.Task.Add(&Task{}, &emptyDefaults)
+	_, err := lc.Task.Add(&Task{})
 	if err == nil {
 		t.Error("Did not error on empty Description")
 	}
@@ -183,19 +183,18 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 }
 
 func TestDefaults(t *testing.T) {
-	defaults := Task{}
-
 	// Set some defaults
-	now := time.Now()
 	fakeDuration, _ := ParseDuration("2h")
-	duration := now.Add(fakeDuration)
-	defaults.Due = &duration
+	duration := time.Now().Add(fakeDuration)
 
-	task, _ := lc.Task.Add(&Task{Description: "foo"}, &defaults)
+	p, err := New(
+		WithDatabasePath(mustTempDB(t)),
+	)
+	require.NoError(t, err)
+	p.Default = Task{Due: &duration}
 
-	if task.Due != &duration {
-		t.Error("Default setting of Due did not work")
-	}
+	task, _ := p.Task.Add(&Task{Description: "foo"})
+	require.EqualValues(t, &duration, task.Due)
 }
 
 // func TestGetByID(t *testing.T) {
@@ -231,19 +230,19 @@ func TestDuplicateIDs(t *testing.T) {
 	}
 
 	// Try to create a new task with the same id
-	_, err = lc.Task.Add(&Task{ID: "duplicate-id", Description: "foo"}, &emptyDefaults)
+	_, err = lc.Task.Add(&Task{ID: "duplicate-id", Description: "foo"})
 	if err == nil {
 		t.Error("Creating a duplicate ID did not present an error")
 	}
 
 	// Make sure IDs and PluginIDs are UniqueTogether
-	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-1", Description: "foo"}, &emptyDefaults)
+	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-1", Description: "foo"})
 	if err != nil {
 		t.Error(err)
 	}
 
 	// Try to create a new task with the same id
-	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-2", Description: "foo"}, &emptyDefaults)
+	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-2", Description: "foo"})
 	if err != nil {
 		t.Error("Creating a duplicate ID with Plugin presented an error")
 	}
@@ -313,7 +312,7 @@ func TestAddParent(t *testing.T) {
 
 func TestTaskSelfAddParent(t *testing.T) {
 	// Definitely don't add yourself to the parents array
-	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-parent", Description: "foo"}, nil)
+	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-parent", Description: "foo"})
 
 	kid.Parents = append(kid.Parents, kid.ID)
 	_, err := lc.Task.Edit(kid)
@@ -324,7 +323,7 @@ func TestTaskSelfAddParent(t *testing.T) {
 
 func TestTaskSelfAddChildren(t *testing.T) {
 	// Definitely don't add yourself to the children array
-	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"}, nil)
+	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"})
 
 	kid.Children = append(kid.Children, kid.ID)
 	_, err := lc.Task.Edit(kid)
@@ -360,7 +359,7 @@ func TestEditNonExisting(t *testing.T) {
 
 func TestEditInvalid(t *testing.T) {
 	task := &Task{ID: "soon-to-be-invalid", Description: "foo"}
-	_, err := lc.Task.Add(task, nil)
+	_, err := lc.Task.Add(task)
 	if err != nil {
 		t.Error(err)
 	}
@@ -374,7 +373,7 @@ func TestEditInvalid(t *testing.T) {
 
 func TestEditCompletedInvalid(t *testing.T) {
 	task := &Task{ID: "test-completed-edit", Description: "foo"}
-	_, err := lc.Task.Add(task, nil)
+	_, err := lc.Task.Add(task)
 	if err != nil {
 		t.Error(err)
 	}
@@ -389,7 +388,7 @@ func TestEditCompletedInvalid(t *testing.T) {
 
 func TestEditDescription(t *testing.T) {
 	task := &Task{ID: "test-edit-description", Description: "original"}
-	_, err := lc.Task.Add(task, nil)
+	_, err := lc.Task.Add(task)
 	if err != nil {
 		t.Error(err)
 	}
@@ -576,7 +575,7 @@ func TestHideAfterDue(t *testing.T) {
 		HideUntil:   &later,
 		Due:         &sooner,
 	}
-	_, err := lc.Task.Add(ts, nil)
+	_, err := lc.Task.Add(ts)
 
 	if err == nil {
 		t.Error("Adding a task with hideuntil later than due did not produce an error", sooner, later)
@@ -593,7 +592,7 @@ func TestDeleteTask(t *testing.T) {
 		ID:          "delete-me",
 		Description: "foo",
 	}
-	added, err := lc.Task.Add(ts, nil)
+	added, err := lc.Task.Add(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -685,8 +684,8 @@ func TestEditExistingValues(t *testing.T) {
 func TestCompleteIDs(t *testing.T) {
 	p, db := newTestPoet()
 	defer os.RemoveAll(db)
-	p.Task.Add(&Task{Description: "This is foo"}, nil)
-	p.Task.Add(&Task{Description: "This is bar"}, nil)
+	p.Task.Add(&Task{Description: "This is foo"})
+	p.Task.Add(&Task{Description: "This is bar"})
 	got := p.CompleteIDsWithPrefix("/active", "bar")
 	require.True(t, strings.HasSuffix(got[0], "\tThis is bar"))
 	require.Equal(t, 1, len(got))

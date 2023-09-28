@@ -25,7 +25,6 @@ var (
 	poetC     *taskpoet.Poet
 	verbose   bool
 	// dbConfig     *taskpoet.DBConfig
-	taskDefaults *taskpoet.Task
 	// logger       *slog.Logger
 )
 
@@ -133,14 +132,13 @@ func initConfig() {
 	checkErr(err)
 
 	// Declare defaults
-	taskDefaults = &taskpoet.Task{}
+	// poetC.Default = taskpoet.Task{}
 	defaultDue := viper.GetString("defaults.due")
 	if defaultDue != "" {
-		now := time.Now()
 		dueDuration, err := taskpoet.ParseDuration(defaultDue)
 		checkErr(err)
-		due := now.Add(dueDuration)
-		taskDefaults.Due = &due
+		due := time.Now().Add(dueDuration)
+		poetC.Default.Due = &due
 	}
 }
 

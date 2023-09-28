@@ -116,7 +116,7 @@ type TaskValidateOpts struct {
 // TaskService is the interface to tasks...we'll delete this junk
 type TaskService interface {
 	// This should replace New, and Log
-	Add(t, d *Task) (*Task, error)
+	Add(t *Task) (*Task, error)
 	AddSet(t []Task, d *Task) error
 
 	BucketName() string
@@ -642,7 +642,7 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 		n := time.Now()
 		t.Completed = &n
 	}
-	ret, err := svc.Add(t, d)
+	ret, err := svc.Add(t)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +653,7 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
 	for _, task := range t {
 		task := task
-		_, err := svc.Add(&task, d)
+		_, err := svc.Add(&task)
 		if err != nil {
 			return err
 		}
@@ -663,12 +663,9 @@ func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
 }
 
 // Add adds a new task
-func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
+func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	// t is the new task
-	// d are the defaults
-	// Detect the path based on if t.Completed has been used
-
-	t.setDefaults(d)
+	t.setDefaults(&svc.localClient.Default)
 
 	// Validate that Task is actually good
 	err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})

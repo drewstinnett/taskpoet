@@ -3,6 +3,7 @@ package taskpoet
 import (
 	"log"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,14 +35,14 @@ func TestActiveTable(t *testing.T) {
 	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
 	p, err := New(WithDatabasePath(tmpfile.Name()))
 	require.NoError(t, err)
-	_, err = p.Task.Add(&Task{Description: "foo"}, nil)
+	_, err = p.Task.Add(&Task{Description: "foo"})
 	require.NoError(t, err)
 	require.Contains(t, p.TaskTable(TableOpts{Prefix: "/active"}), "foo")
 }
 
 func TestCompletedTable(t *testing.T) {
-	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
-	p, err := New(WithDatabasePath(tmpfile.Name()))
+	// tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
+	p, err := New(WithDatabasePath(mustTempDB(t)))
 	require.NoError(t, err)
 	_, err = p.Task.Log(&Task{ID: "log-this-task", Description: "foo"}, &emptyDefaults)
 	require.NoError(t, err)
@@ -51,4 +52,8 @@ func TestCompletedTable(t *testing.T) {
 			FilterHidden,
 		},
 	}), "foo")
+}
+
+func mustTempDB(t *testing.T) string {
+	return path.Join(t.TempDir(), "taskpoet.db")
 }

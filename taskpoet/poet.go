@@ -97,10 +97,11 @@ func WithNamespace(n string) Option {
 	})
 }
 
-// Poet isi the main operator for this whole thing
+// Poet is the main operator for this whole thing
 type Poet struct {
 	DB        *bolt.DB
 	Namespace string
+	Default   Task
 	Task      TaskService
 	dbPath    string
 }

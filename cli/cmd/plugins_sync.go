@@ -16,12 +16,12 @@ var syncCmd = &cobra.Command{
 	Long:  `Pull in tasks from external places like Gitlab, Github...ServiceNow maybe even?`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("sync called")
-		ps, err := localClient.Task.GetPlugins()
+		ps, err := poetC.Task.GetPlugins()
 		checkErr(err)
 		for name, c := range ps {
 			log.Printf("%+v %+v\n", name, c)
 			p := c()
-			err := localClient.Task.SyncPlugin(p)
+			err := poetC.Task.SyncPlugin(p)
 			checkErr(err)
 		}
 	},

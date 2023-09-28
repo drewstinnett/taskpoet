@@ -31,6 +31,14 @@ type Task struct {
 	Tags         []string   `json:"tags,omitempty"`
 }
 
+// DueString returns a string representation of Due
+func (t Task) DueString() string {
+	if t.Due != nil {
+		return t.Due.Format("2006-01-02")
+	}
+	return ""
+}
+
 // Tasks represents multiple Task items
 type Tasks []Task
 
@@ -707,4 +715,41 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	}
 
 	return allIDs, nil
+}
+
+// CompleteIDsWithPrefix returns a list of ids matching the given prefix and
+// autocomplete pattern
+func (p Poet) CompleteIDsWithPrefix(prefix, toComplete string) []string {
+	allIDs := []string{}
+
+	err := p.DB.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(p.Task.BucketName()))
+		err := bucket.ForEach(func(k, v []byte) error {
+			if strings.HasPrefix(string(k), prefix) {
+				idPieces := strings.Split(string(k), "/")
+				id := idPieces[len(idPieces)-1]
+				var task Task
+				panicIfErr(json.Unmarshal(v, &task))
+				if strings.HasPrefix(id, toComplete) || strings.Contains(task.Description, toComplete) {
+					allIDs = append(allIDs, fmt.Sprintf("%v\t%v", id[0:5], task.Description))
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return allIDs
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

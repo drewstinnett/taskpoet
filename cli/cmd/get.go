@@ -29,18 +29,16 @@ func NewGetCmd() *cobra.Command {
 			} else {
 				re = regexp.MustCompile(".*")
 			}
-			fp := &taskpoet.FilterParams{
-				Regex: re,
-				Limit: limit,
-			}
-			table := localClient.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			// table := poetC.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			table := poetC.TaskTable(taskpoet.TableOpts{
+				Prefix:       "/active",
+				FilterParams: taskpoet.FilterParams{Regex: re, Limit: limit},
+				Filters: []taskpoet.Filter{
+					taskpoet.FilterHidden,
+					taskpoet.FilterRegex,
+				},
+			})
 			fmt.Print(table)
-
-			/*
-				if limit < len(tasks) {
-					slog.Warn("more records to display, increase the limit to see it", "n-more", len(tasks)-limit)
-				}
-			*/
 		},
 	}
 	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")

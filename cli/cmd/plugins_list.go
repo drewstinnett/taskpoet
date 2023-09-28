@@ -12,7 +12,7 @@ var listPluginsCmd = &cobra.Command{
 	Short: "List Plugins",
 	Long:  `List Plugins`,
 	Run: func(cmd *cobra.Command, args []string) {
-		ps, err := localClient.Task.GetPlugins()
+		ps, err := poetC.Task.GetPlugins()
 		checkErr(err)
 		for name, c := range ps {
 			p := c()

@@ -14,16 +14,23 @@ var completeCmd = &cobra.Command{
 	Aliases: []string{"c"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		task, err := localClient.Task.GetWithPartialID(args[0], "", "/active")
+		task, err := poetC.Task.GetWithPartialID(args[0], "", "/active")
 		checkErr(err)
-		err = localClient.Task.Complete(task)
+		err = poetC.Task.Complete(task)
 		checkErr(err)
 		log.Printf("Completed task: '%v', nice work!", task.Description)
+	},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(completeCmd)
+	completeCmd.PersistentFlags().IntP("limit", "l", 100, "Limit to N results")
 
 	// Here you will define your flags and configuration settings.
 

@@ -1,4 +1,4 @@
-package taskpoet_test
+package taskpoet
 
 import (
 	"net/http"

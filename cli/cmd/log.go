@@ -3,7 +3,6 @@ package cmd
 import (
 	"log"
 	"strings"
-	"time"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
@@ -17,14 +16,21 @@ var logCmd = &cobra.Command{
 	Long: `Log a completed task. Useful for when you do something that was not in your
 actual TODO list`,
 	Run: func(cmd *cobra.Command, args []string) {
-		now := time.Now()
-		t := &taskpoet.Task{
+		/*
+			now := time.Now()
+			t := &taskpoet.Task{
+				Description: strings.Join(args, " "),
+				Completed:   &now,
+			}
+			found, err := poetC.Task.Add(t, taskDefaults)
+
+			checkErr(err)
+		*/
+		got, err := poetC.Task.Log(&taskpoet.Task{
 			Description: strings.Join(args, " "),
-			Completed:   &now,
-		}
-		found, err := localClient.Task.Add(t, taskDefaults)
+		}, &taskpoet.Task{})
 		checkErr(err)
-		log.Printf("Logged Task: '%v'", found.Description)
+		log.Printf("Logged Task: '%v'", got.Description)
 	},
 }
 

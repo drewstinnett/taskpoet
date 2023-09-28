@@ -20,10 +20,10 @@ import (
 )
 
 var (
-	cfgFile     string
-	namespace   string
-	localClient *taskpoet.Poet
-	verbose     bool
+	cfgFile   string
+	namespace string
+	poetC     *taskpoet.Poet
+	verbose   bool
 	// dbConfig     *taskpoet.DBConfig
 	taskDefaults *taskpoet.Task
 	// logger       *slog.Logger
@@ -129,7 +129,7 @@ func initConfig() {
 	if cerr := viper.ReadInConfig(); cerr == nil {
 		slog.Debug("Using config file", "file", viper.ConfigFileUsed())
 	}
-	localClient, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
+	poetC, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
 	checkErr(err)
 
 	// Declare defaults
@@ -148,4 +148,8 @@ func checkErr(err error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func noComplete(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return []string{}, cobra.ShellCompDirectiveNoFileComp
 }

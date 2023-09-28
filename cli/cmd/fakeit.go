@@ -32,7 +32,7 @@ var fakeitCmd = &cobra.Command{
 			}
 			ts = append(ts, t)
 		}
-		err := localClient.Task.AddSet(ts, nil)
+		err := poetC.Task.AddSet(ts, nil)
 		checkErr(err)
 
 		log.Println("Generating completed tasks")
@@ -49,7 +49,7 @@ var fakeitCmd = &cobra.Command{
 			}
 			tsl = append(tsl, t)
 		}
-		err = localClient.Task.AddSet(tsl, nil)
+		err = poetC.Task.AddSet(tsl, nil)
 		checkErr(err)
 	},
 }

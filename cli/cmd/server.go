@@ -14,7 +14,7 @@ var serverCmd = &cobra.Command{
 		debug, _ := cmd.PersistentFlags().GetBool("debug")
 		c := &taskpoet.RouterConfig{
 			Debug:       debug,
-			LocalClient: localClient,
+			LocalClient: poetC,
 		}
 		r := taskpoet.NewRouter(c)
 		checkErr(r.Run())

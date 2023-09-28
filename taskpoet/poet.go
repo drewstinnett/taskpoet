@@ -6,6 +6,7 @@ package taskpoet
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"regexp"
@@ -161,68 +162,147 @@ var (
 	entryAlt = lipgloss.NewStyle().Foreground(special).Background(subtle).Padding(0, 1, 0, 1)
 )
 
-// TaskTable returns a table of the given tasks
-func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
-	w, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		fmt.Fprint(os.Stderr, "unable to calculate height and width of terminal")
-	}
-	tasks, err := p.Task.List("/active")
+// TableOpts defines the data displayed in a table
+type TableOpts struct {
+	Prefix       string
+	FilterParams FilterParams
+	Filters      []Filter
+	Columns      []string
+}
+
+// MustList returns tasks from a prefix or panics
+func (p Poet) MustList(s string) Tasks {
+	tasks, err := p.Task.List(s)
 	if err != nil {
 		panic(err)
 	}
-	sort.Sort(tasks)
-	tasks = ApplyFilters(tasks, &fp, filters...)
+	return tasks
+}
 
+var columnMap map[string]func(Task) string = map[string]func(Task) string{
+	"ID":          func(t Task) string { return t.ShortID() },
+	"Age":         func(t Task) string { return t.Added.Format("2006-01-02") },
+	"Description": func(t Task) string { return t.Description },
+	"Due":         func(t Task) string { return t.DueString() },
+	"Tags":        func(t Task) string { return strings.Join(t.Tags, ",") },
+	"Completed": func(t Task) string {
+		if t.Completed == nil {
+			return ""
+		}
+		return t.Completed.Format("2006-01-02")
+	},
+}
+
+var columnSizeMap map[string]int = map[string]int{
+	"ID":          8,
+	"Age":         15,
+	"Description": 50,
+	"Due":         15,
+	"Tags":        15,
+	"Completed":   15,
+}
+
+func columnSize(s string) (int, error) {
+	val, ok := columnSizeMap[s]
+	if !ok {
+		return 0, fmt.Errorf("column size not defined: %v", s)
+	}
+	return val, nil
+}
+
+func mustColumnSize(s string) int {
+	got, err := columnSize(s)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+func columnValue(s string, t Task) (string, error) {
+	valF, ok := columnMap[s]
+	if !ok {
+		return "", fmt.Errorf("column not defined: %v", s)
+	}
+	return valF(t), nil
+}
+
+func mustColumnValue(s string, t Task) string {
+	got, err := columnValue(s, t)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+func iterateColumnHeaders(c []string) []string {
+	ret := make([]string, len(c))
+	for idx, item := range c {
+		ret[idx] = header.Width(mustColumnSize(item)).Render(item)
+	}
+	return ret
+}
+
+func iterateColumnValues(c []string, t Task, s lipgloss.Style) []string {
+	ret := make([]string, len(c))
+	for idx, item := range c {
+		ret[idx] = s.Width(mustColumnSize(item)).Render(mustColumnValue(item, t))
+	}
+	return ret
+}
+
+func columnsOrDefault(c []string) []string {
+	defaultColumns := []string{"ID", "Age", "Description", "Due", "Tags"}
+	if len(c) == 0 {
+		return defaultColumns
+	}
+	return c
+}
+
+// TaskTable returns a table of the given tasks
+// func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
+func (p *Poet) TaskTable(opts TableOpts) string {
+	tasks := ApplyFilters(p.MustList(opts.Prefix), &opts.FilterParams, opts.Filters...)
+	sort.Sort(tasks)
 	allTasksLen := len(tasks)
-	if fp.Limit > 0 {
-		tasks = tasks[0:min(len(tasks), fp.Limit)]
+	if opts.FilterParams.Limit > 0 {
+		tasks = tasks[0:min(len(tasks), opts.FilterParams.Limit)]
 	}
 
-	doc := strings.Builder{}
+	columns := columnsOrDefault(opts.Columns)
+
 	dLen := min(longestDescription(tasks)+5, 50)
 	row := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		header.Width(8).Render("ID"),
-		header.Width(15).Render("Age"),
-		header.Width(dLen).Render("Description"),
-		header.Width(15).Render("Due"),
-		header.Width(15).Render("Tags"),
+		iterateColumnHeaders(columns)...,
 	)
+	doc := strings.Builder{}
 	doc.WriteString(row + "\n")
 
 	for idx, task := range tasks {
-		var rs lipgloss.Style
-		if idx%2 == 0 {
-			rs = entry
-		} else {
-			rs = entryAlt
-		}
-		var due string
-		if task.Due != nil {
-			due = task.Due.Format("2006-01-02")
-		}
+		rs := altRowStyle(idx, entry, entryAlt)
 		row := lipgloss.JoinHorizontal(
 			lipgloss.Top,
-			rs.Width(8).Render(task.ShortID()),
-			rs.Width(15).Render(task.Added.Format("2006-01-02")),
-			rs.Width(dLen).Render(task.Description),
-			rs.Width(15).Render(due),
-			rs.Width(15).Render(strings.Join(task.Tags, ",")),
+			iterateColumnValues(columns, task, rs)...,
 		)
 		doc.WriteString(row + "\n")
 	}
+	addLimitWarning(&doc, 53+dLen, opts.FilterParams.Limit, allTasksLen)
 
-	if fp.Limit < allTasksLen {
-		doc.WriteString(
-			lipgloss.NewStyle().Width(53 + dLen).Align(lipgloss.Right).Render(fmt.Sprintf("\n* %v more records to display, increase the limit to see it\n", allTasksLen-fp.Limit)),
-		)
-	}
-
+	w, _, _ := term.GetSize(int(os.Stdout.Fd()))
 	if w > 0 {
 		docStyle = docStyle.MaxWidth(w)
 	}
 	return docStyle.Render(doc.String())
+}
+
+func addLimitWarning(doc io.StringWriter, width, limit, total int) {
+	if limit < total {
+		_, _ = doc.WriteString(
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Right).Italic(true).Render(
+				fmt.Sprintf("* %v more records to display, increase the limit to see it",
+					total-limit)),
+		)
+	}
 }
 
 func longestDescription(tasks Tasks) int {
@@ -288,4 +368,11 @@ func ApplyFilters(tasks Tasks, p *FilterParams, filters ...Filter) Tasks {
 	}
 
 	return filteredRecords
+}
+
+func altRowStyle(idx int, even, odd lipgloss.Style) lipgloss.Style {
+	if idx%2 == 0 {
+		return even
+	}
+	return odd
 }

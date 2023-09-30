@@ -3,6 +3,7 @@ package taskpoet
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -19,18 +20,11 @@ var (
 	emptyDefaults Task
 	router        *gin.Engine
 	testDBPath    string
-	// dbConfig      *taskpoet.DBConfig
 )
 
-func tempDB() string {
-	tmpfile, err := os.CreateTemp("", "taskpoet.*.db")
-	panicIfErr(err)
-	return tmpfile.Name()
-}
-
-func newTestPoet() (*Poet, string) {
-	testDBPath = tempDB()
-	p, err := New(WithDatabasePath(testDBPath))
+func newTestPoet(t *testing.T) (*Poet, string) {
+	dbPath := path.Join(t.TempDir(), "testtaskpoet.db")
+	p, err := New(WithDatabasePath(dbPath))
 	panicIfErr(err)
 	return p, testDBPath
 }
@@ -45,10 +39,7 @@ func setup() {
 	emptyDefaults = Task{}
 
 	// Init Router
-	rc := &RouterConfig{
-		LocalClient: lc,
-	}
-	router = NewRouter(rc)
+	router = NewRouter(&RouterConfig{LocalClient: lc})
 }
 
 func shutdown() {
@@ -65,27 +56,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-/*
-func TestAddLocalTask(t *testing.T) {
-	tests := []struct {
-		task Task
-		path string
-	}{
-		{
-			Task{ID: "add-1", Description: "foo-added-1"},
-			"/active/add-1",
-		},
-	}
-
-	for _, test := range tests {
-		lc.Task.Add(&test.task, nil)
-		gotTask := lc.Task.GetBy
-
-	}
-
-}
-*/
-
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		task  Task
@@ -99,15 +69,8 @@ func TestValidate(t *testing.T) {
 
 	for _, test := range tests {
 		err := lc.Task.Validate(&test.task, nil)
-		var valid bool
-		if err != nil {
-			valid = false
-		} else {
-			valid = true
-		}
-		if valid != test.valid {
-			t.Errorf("Invalid result when testing validation. Wanted %v and got %v for %v", test.valid, valid, test.task)
-		}
+		valid := err == nil
+		require.Equal(t, valid, test.valid)
 	}
 }
 
@@ -120,33 +83,24 @@ func TestLogTask(t *testing.T) {
 
 func TestCompleteTask(t *testing.T) {
 	task, err := lc.Task.Add(&Task{Description: "soon-to-complete-task"})
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	activePath := task.DetectKeyPath()
 
-	err = lc.Task.Complete(task)
-	if err != nil {
-		t.Errorf("Error completing Task")
-	}
+	require.NoError(t, lc.Task.Complete(task))
 	completePath := task.DetectKeyPath()
 
 	_, err = lc.Task.GetWithExactPath(activePath)
-	if err == nil {
-		t.Errorf("When completing a task, the /active id is not removed")
-	}
+	require.Error(t, err)
+	require.True(t, strings.HasPrefix(err.Error(), "could not find task:"))
 
 	_, err = lc.Task.GetWithExactPath(completePath)
-	if err != nil {
-		t.Errorf("When completing a task, the /completed id is not created")
-	}
+	require.NoError(t, err)
 }
 
 func TestBlankDescription(t *testing.T) {
 	_, err := lc.Task.Add(&Task{})
-	if err == nil {
-		t.Error("Did not error on empty Description")
-	}
+	require.Error(t, err)
+	require.EqualError(t, err, "missing description for Task")
 }
 
 func TestGetByPartialIDWithPath(t *testing.T) {
@@ -158,16 +112,10 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 		{Description: "foo", ID: "dupthing-num-2"},
 		{Description: "foo"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 	task, err := lc.Task.GetWithPartialID("fake", "", "/active")
-	if err != nil {
-		t.Error(err)
-	} else if task.ID != "fakeid" {
-		t.Errorf("Expected to retrieve 'fakeid' but got %v", task.ID)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "fakeid", task.ID)
 
 	// Test for a non-unique partial
 	_, err = lc.Task.GetWithPartialID("dupthing", "", "/active")
@@ -202,7 +150,7 @@ func TestGetByExactPath(t *testing.T) {
 	ts := []Task{
 		{Description: "foo", ID: "id-stay-active"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -254,7 +202,7 @@ func TestGetByExactID(t *testing.T) {
 		{Description: "foo", ID: "another_fakeid-exact"},
 		{Description: "foo"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -288,7 +236,7 @@ func TestAddParent(t *testing.T) {
 		{ID: "parent", Description: "Parent task"},
 	}
 
-	err := lc.Task.AddSet(tasks, nil)
+	err := lc.Task.AddSet(tasks)
 	if err != nil {
 		t.Error(err)
 	}
@@ -337,7 +285,7 @@ func TestShortID(t *testing.T) {
 		{ID: "a", Description: "Short ID"},
 		{ID: "foo-bar-baz-bazinga", Description: "Long ID"},
 	}
-	lc.Task.AddSet(tasks, nil)
+	lc.Task.AddSet(tasks)
 	short, _ := lc.Task.GetWithID("a", "", "/active")
 	long, _ := lc.Task.GetWithID("foo-bar-baz-bazinga", "", "/active")
 
@@ -409,7 +357,7 @@ func TestEditSet(t *testing.T) {
 		{Description: "Foo", ID: "edit-set-1"},
 		{Description: "Bar", ID: "edit-set-2"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -432,7 +380,7 @@ func TestAddParentFunc(t *testing.T) {
 		{ID: "parent-func", Description: "Parent task"},
 	}
 
-	err := lc.Task.AddSet(tasks, nil)
+	err := lc.Task.AddSet(tasks)
 	if err != nil {
 		t.Error(err)
 	}
@@ -466,7 +414,7 @@ func TestAddChildFunc(t *testing.T) {
 		{ID: "parent-func2", Description: "Parent task"},
 	}
 
-	err := lc.Task.AddSet(tasks, nil)
+	err := lc.Task.AddSet(tasks)
 	if err != nil {
 		t.Error(err)
 	}
@@ -500,7 +448,7 @@ func TestGetByPartialID(t *testing.T) {
 		{Description: "foo", ID: "partial-id-test-2"},
 		{Description: "foo", ID: "unique-partial-id-test-2"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -530,7 +478,7 @@ func TestDescribe(t *testing.T) {
 		{Description: "foo", ID: "describe-test"},
 		{Description: "Some parent", ID: "describe-parent"},
 	}
-	lc.Task.AddSet(ts, &emptyDefaults)
+	lc.Task.AddSet(ts)
 	task, _ := lc.Task.GetWithID("describe-test", "builtin", "/active")
 	taskP, _ := lc.Task.GetWithID("describe-parent", "builtin", "/active")
 	lc.Task.Describe(task)
@@ -588,20 +536,14 @@ func TestDefaultBucketName(t *testing.T) {
 }
 
 func TestDeleteTask(t *testing.T) {
-	ts := &Task{
+	added, err := lc.Task.Add(&Task{
 		ID:          "delete-me",
 		Description: "foo",
-	}
-	added, err := lc.Task.Add(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	})
+	require.NoError(t, err)
 
 	// Delete it now
-	err = lc.Task.Delete(added)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.Delete(added))
 
 	_, err = lc.Task.GetWithID("delete-me", "", "")
 	if err == nil {
@@ -615,44 +557,35 @@ func TestDetectKeyPath(t *testing.T) {
 		wanted string
 	}{
 		{
-			Task{ID: "foo", Description: "bar"},
-			"/active/builtin/foo",
+			task:   Task{ID: "foo", Description: "bar"},
+			wanted: "/active/builtin/foo",
 		},
 		{
-			Task{ID: "foo", Description: "bar", PluginID: "plugin-1"},
-			"/active/plugin-1/foo",
+			task:   Task{ID: "foo", Description: "bar", PluginID: "plugin-1"},
+			wanted: "/active/plugin-1/foo",
 		},
 	}
 
 	for _, test := range tests {
 		got := string(test.task.DetectKeyPath())
-		if got != test.wanted {
-			t.Errorf("Failed DetectKeyPath, wanted %v but got %v", test.wanted, got)
-		}
+		require.Equal(t, test.wanted, got)
 	}
 }
 
 func TestAddOrEditSet(t *testing.T) {
-	ts := []Task{
+	require.NoError(t, lc.Task.AddSet([]Task{
 		{Description: "Foo", ID: "add-or-edit-do-edit-1"},
-	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
-	}
+	}))
 
-	aets := []Task{
+	require.NoError(t, lc.Task.AddOrEditSet([]Task{
 		{Description: "Edited-desc", ID: "add-or-edit-do-edit-1"},
 		{Description: "Added-desc", ID: "add-or-edit-do-add-1"},
-	}
+	}))
 
-	err = lc.Task.AddOrEditSet(aets)
-	if err != nil {
-		t.Error(err)
-	}
-
-	edited, _ := lc.Task.GetWithID("add-or-edit-do-edit-1", "", "")
-	added, _ := lc.Task.GetWithID("add-or-edit-do-add-1", "", "")
+	edited, err := lc.Task.GetWithID("add-or-edit-do-edit-1", "", "")
+	require.NoError(t, err)
+	added, err := lc.Task.GetWithID("add-or-edit-do-add-1", "", "")
+	require.NoError(t, err)
 
 	assert.Equal(t, edited.Description, "Edited-desc")
 	assert.Equal(t, added.Description, "Added-desc")
@@ -662,7 +595,8 @@ func TestEditExistingValues(t *testing.T) {
 	ts := []Task{
 		{Description: "Foo", ID: "edit-existing-1"},
 	}
-	err := lc.Task.AddSet(ts, &emptyDefaults)
+	err := lc.Task.AddSet(ts)
+	require.NoError(t, err)
 	if err != nil {
 		t.Error(err)
 	}
@@ -672,9 +606,7 @@ func TestEditExistingValues(t *testing.T) {
 	}
 
 	err = lc.Task.AddOrEditSet(aets)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
 
@@ -682,7 +614,7 @@ func TestEditExistingValues(t *testing.T) {
 }
 
 func TestCompleteIDs(t *testing.T) {
-	p, db := newTestPoet()
+	p, db := newTestPoet(t)
 	defer os.RemoveAll(db)
 	p.Task.Add(&Task{Description: "This is foo"})
 	p.Task.Add(&Task{Description: "This is bar"})

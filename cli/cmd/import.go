@@ -27,6 +27,7 @@ $ taskpoet import /tmp/tw.backup.json `,
 		err = json.Unmarshal(b, &tasks)
 		checkErr(err)
 
+		log.Printf("Importing %v items", len(tasks))
 		imported, err := poetC.ImportTaskWarrior(tasks)
 		checkErr(err)
 

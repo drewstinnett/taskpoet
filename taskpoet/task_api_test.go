@@ -22,7 +22,7 @@ func TestActiveRoute(t *testing.T) {
 			Description: "foo",
 		},
 	}
-	err := lc.Task.AddSet(ts, nil)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -65,7 +65,7 @@ func TestCompleted(t *testing.T) {
 			Completed:   &now,
 		},
 	}
-	err := lc.Task.AddSet(ts, nil)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -134,7 +134,7 @@ func TestGetTask(t *testing.T) {
 			Description: "foo",
 		},
 	}
-	err := lc.Task.AddSet(ts, nil)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -157,7 +157,7 @@ func TestEditTask(t *testing.T) {
 			Description: "orig",
 		},
 	}
-	err := lc.Task.AddSet(ts, nil)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -190,7 +190,7 @@ func TestDeleteTest(t *testing.T) {
 			Description: "orig",
 		},
 	}
-	err := lc.Task.AddSet(ts, nil)
+	err := lc.Task.AddSet(ts)
 	if err != nil {
 		t.Error(err)
 	}

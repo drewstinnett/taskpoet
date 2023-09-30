@@ -28,6 +28,10 @@ func TestTWImport(t *testing.T) {
 		{Description: "bar is done", End: &pastT},
 		{Description: "baz is waiting", Wait: &futureT},
 		{Description: "quux has a tag or two", Tags: []string{"canary", "yearly-review"}},
+		{
+			Description: "something comment worthy",
+			Annotations: []TWAnnotation{{Entry: &pastT, Description: "This is an annotation"}},
+		},
 	}
 	got, err := p.ImportTaskWarrior(ts)
 	require.NoError(t, err)

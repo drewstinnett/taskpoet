@@ -48,7 +48,7 @@ func taskAPIAdd(c *gin.Context) {
 	}
 
 	// Add Tasks
-	err = client.Task.AddSet(tasks, nil)
+	err = client.Task.AddSet(tasks)
 	checkAPIErr(c, err)
 }
 

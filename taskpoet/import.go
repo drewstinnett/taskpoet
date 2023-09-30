@@ -31,17 +31,26 @@ func (t *TWTime) String() string {
 
 // TaskWarriorTask is a task from TaskWarrior
 type TaskWarriorTask struct {
-	ID          int64    `json:"id,omitempty"`
-	Description string   `json:"description,omitempty"`
-	UUID        string   `json:"uuid,omitempty"`
-	Status      string   `json:"status,omitempty"`
-	Entry       *TWTime  `json:"entry,omitempty"`
-	Modified    *TWTime  `json:"modified,omitempty"`
-	Due         *TWTime  `json:"due,omitempty"`
-	Wait        *TWTime  `json:"wait,omitempty"`
-	End         *TWTime  `json:"end,omitempty"`
-	Urgency     float64  `json:"urgency,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
+	ID          int64          `json:"id,omitempty"`
+	Description string         `json:"description,omitempty"`
+	UUID        string         `json:"uuid,omitempty"`
+	Status      string         `json:"status,omitempty"`
+	Entry       *TWTime        `json:"entry,omitempty"`
+	Modified    *TWTime        `json:"modified,omitempty"`
+	Due         *TWTime        `json:"due,omitempty"`
+	Wait        *TWTime        `json:"wait,omitempty"`
+	End         *TWTime        `json:"end,omitempty"`
+	Reviewed    *TWTime        `json:"reviewed,omitempty"`
+	Until       *TWTime        `json:"until,omitempty"`
+	Urgency     float64        `json:"urgency,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Annotations []TWAnnotation `json:"annotations,omitempty"`
+}
+
+// TWAnnotation is a TaskWarrior Annotation
+type TWAnnotation struct {
+	Entry       *TWTime `json:"entry,omitempty"`
+	Description string  `json:"description,omitempty"`
 }
 
 // TaskWarriorTasks is multiple TaskWarriorTasks items
@@ -58,18 +67,28 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks) (int, error) {
 			ID:          twItem.UUID,
 			Tags:        twItem.Tags,
 		}
-		if twItem.Due != nil {
-			t.Due = (*time.Time)(twItem.Due)
+		t.Due = (*time.Time)(twItem.Due)
+		t.Completed = (*time.Time)(twItem.End)
+		t.HideUntil = (*time.Time)(twItem.Wait)
+		t.Reviewed = (*time.Time)(twItem.Reviewed)
+		if twItem.Annotations != nil {
+			t.Comments = make([]Comment, len(twItem.Annotations))
+			for idx, a := range twItem.Annotations {
+				t.Comments[idx].Comment = a.Description
+				t.Comments[idx].Added = time.Time(*a.Entry)
+			}
 		}
-		if twItem.End != nil {
-			t.Completed = (*time.Time)(twItem.End)
+		t.CancelAfter = (*time.Time)(twItem.Until)
+		if (t.HideUntil != nil) && (t.Due != nil) && t.HideUntil.After(*t.Due) {
+			log.Printf("warn: importing task: Due was after HideUntil, so we tweaked that")
+			nh := t.Due.Add(-1 * time.Minute)
+			t.HideUntil = &nh
+			// twItem.Due = twItem.Wait + (1 * time.Minute)
 		}
-		if twItem.Wait != nil {
-			t.HideUntil = (*time.Time)(twItem.Wait)
-		}
+
 		_, err := p.Task.Add(t)
 		if err != nil {
-			log.Printf("error importing task: %v", err)
+			log.Printf("error importing task: %v (%v)", twItem.Description, err)
 		} else {
 			imported++
 		}

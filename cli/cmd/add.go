@@ -87,9 +87,15 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 
 func init() {
 	rootCmd.AddCommand(addCmd)
+	err := bindAdd(addCmd)
+	if err != nil {
+		panic(err)
+	}
+}
 
-	addCmd.PersistentFlags().UintP("effort-impact", "e", 0, "Effort/Impact Score Assessment. See Help for more info")
-	err := addCmd.RegisterFlagCompletionFunc("effort-impact", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func bindAdd(cmd *cobra.Command) error {
+	cmd.PersistentFlags().UintP("effort-impact", "e", 0, "Effort/Impact Score Assessment. See Help for more info")
+	err := cmd.RegisterFlagCompletionFunc("effort-impact", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			"0\tUndefined (Default)",
 			"1\tLow Effort, High Impact (Sweet Spot)",
@@ -100,15 +106,15 @@ func init() {
 	})
 	checkErr(err)
 
-	addCmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
-	err = addCmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	cmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
+	if err := cmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
-	})
-	checkErr(err)
+	}); err != nil {
+		return err
+	}
 
-	addCmd.PersistentFlags().StringP("due", "d", "", "How long before this is due?")
-	addCmd.PersistentFlags().StringP("wait", "w", "", "Wait until given duration to actually show up as active")
-	addCmd.PersistentFlags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
-
-	// addCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	cmd.PersistentFlags().StringP("due", "d", "", "How long before this is due?")
+	cmd.PersistentFlags().StringP("wait", "w", "", "Wait until given duration to actually show up as active")
+	cmd.PersistentFlags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
+	return nil
 }

@@ -22,13 +22,23 @@ type Task struct {
 	PluginID     string     `json:"plugin_id"`
 	Description  string     `json:"description"`
 	Due          *time.Time `json:"due,omitempty"`
-	HideUntil    *time.Time `json:"hide_until,omitempty"`
+	HideUntil    *time.Time `json:"hide_until,omitempty"`   // HideUntil is similar to 'wait' in taskwarrior
+	CancelAfter  *time.Time `json:"cancel_after,omitempty"` // CancelAfter is similar to 'until' in taskwarrior
 	Completed    *time.Time `json:"completed,omitempty"`
+	Reviewed     *time.Time `json:"reviewed,omitempty"`
 	Added        time.Time  `json:"added,omitempty"`
 	EffortImpact uint       `json:"effort_impact"`
 	Children     []string   `json:"children,omitempty"`
 	Parents      []string   `json:"parents,omitempty"`
 	Tags         []string   `json:"tags,omitempty"`
+	Comments     []Comment  `json:"comments,omitempty"`
+	Project      string     `json:"project,omitempty"`
+}
+
+// Comment is just a little comment/note on a task
+type Comment struct {
+	Added   time.Time `json:"added,omitempty"`
+	Comment string    `json:"comment,omitempty"`
 }
 
 // DueString returns a string representation of Due
@@ -68,19 +78,16 @@ func (t *Task) DetectKeyPath() []byte {
 		pluginID = t.PluginID
 	}
 	if t.Completed == nil {
-		// keyPath = fmt.Sprintf("/active/%s", t.ID)
 		keyPath = filepath.Join("/active", pluginID, t.ID)
 	} else {
 		keyPath = filepath.Join("/completed", pluginID, t.ID)
-		// keyPath = fmt.Sprintf("/completed/%s", t.ID)
 	}
 	return []byte(keyPath)
 }
 
 func (t *Task) setDefaults(d *Task) {
-	now := time.Now()
 	if t.Added.IsZero() {
-		t.Added = now
+		t.Added = time.Now()
 	}
 
 	// If no ID is set, just generate one
@@ -102,10 +109,7 @@ func (t *Task) setDefaults(d *Task) {
 
 // ShortID is just the first 5 characters of the ID
 func (t *Task) ShortID() string {
-	if len(t.ID) > 5 {
-		return t.ID[0:5]
-	}
-	return t.ID
+	return t.ID[0:min(len(t.ID), 5)]
 }
 
 // TaskValidateOpts is a dumb struct...why is this here?
@@ -117,7 +121,7 @@ type TaskValidateOpts struct {
 type TaskService interface {
 	// This should replace New, and Log
 	Add(t *Task) (*Task, error)
-	AddSet(t []Task, d *Task) error
+	AddSet(t []Task) error
 
 	BucketName() string
 
@@ -219,8 +223,7 @@ func (svc *TaskServiceOp) AddParent(c, p *Task) error {
 	c.Parents = append(c.Parents, p.ID)
 	p.Children = append(p.Children, c.ID)
 
-	err := svc.EditSet([]Task{*c, *p})
-	if err != nil {
+	if err := svc.EditSet([]Task{*c, *p}); err != nil {
 		return err
 	}
 
@@ -232,8 +235,7 @@ func (svc *TaskServiceOp) AddChild(p, c *Task) error {
 	p.Children = append(p.Children, c.ID)
 	c.Parents = append(c.Parents, p.ID)
 
-	err := svc.EditSet([]Task{*c, *p})
-	if err != nil {
+	if err := svc.EditSet([]Task{*c, *p}); err != nil {
 		return err
 	}
 
@@ -253,12 +255,10 @@ func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
 		}
 	}
 
-	err := svc.localClient.Task.AddSet(addSet, nil)
-	if err != nil {
+	if err := svc.localClient.Task.AddSet(addSet); err != nil {
 		return err
 	}
-	err = svc.localClient.Task.EditSet(editSet)
-	if err != nil {
+	if err := svc.localClient.Task.EditSet(editSet); err != nil {
 		return err
 	}
 
@@ -347,14 +347,15 @@ func (svc *TaskServiceOp) Delete(t *Task) error {
 		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
 	}
 
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+	if svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = b.Delete(originalTask.DetectKeyPath())
-		if err != nil {
+		if derr := b.Delete(originalTask.DetectKeyPath()); derr != nil {
 			return err
 		}
 		return nil
-	})
+	}) != nil {
+		return err
+	}
 
 	return nil
 }
@@ -371,9 +372,8 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, errors.New("editing the Completed field is not yet supported as it changes the path")
 	}
 
-	err = svc.Validate(t, &TaskValidateOpts{IsExisting: true})
-	if err != nil {
-		return nil, err
+	if verr := svc.Validate(t, &TaskValidateOpts{IsExisting: true}); verr != nil {
+		return nil, verr
 	}
 
 	taskSerial, err := json.Marshal(t)
@@ -381,7 +381,7 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, err
 	}
 
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+	uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		err = b.Put(t.DetectKeyPath(), taskSerial)
 		if err != nil {
@@ -389,6 +389,9 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		}
 		return nil
 	})
+	if uerr != nil {
+		return nil, uerr
+	}
 
 	return t, nil
 }
@@ -650,7 +653,7 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 }
 
 // AddSet adds a task set
-func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
+func (svc *TaskServiceOp) AddSet(t []Task) error {
 	for _, task := range t {
 		task := task
 		_, err := svc.Add(&task)
@@ -658,7 +661,6 @@ func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
 			return err
 		}
 	}
-	// return errors.New("Thing")
 	return nil
 }
 
@@ -677,15 +679,16 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 		return nil, err
 	}
 
-	keyPath := t.DetectKeyPath()
 	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = bucket.Put(keyPath, taskSerial)
-		if err != nil {
+		if perr := bucket.Put(t.DetectKeyPath(), taskSerial); perr != nil {
 			return err
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return t, nil
 }

@@ -1,16 +1,17 @@
 package taskpoet
 
 import (
+	"fmt"
 	"strings"
 	"time"
-
-	"github.com/charmbracelet/log"
 )
 
 // TWTime is the format that TaskWarrior uses for timestamps
 type TWTime time.Time
 
 const twTimeLayout = "20060102T150405Z"
+
+var errExists = fmt.Errorf("task already exists")
 
 // UnmarshalJSON Parses the json string in the custom format
 func (t *TWTime) UnmarshalJSON(b []byte) (err error) {
@@ -60,55 +61,42 @@ type TaskWarriorTasks []TaskWarriorTask
 
 // ImportTaskWarrior imports a set of TaskWarrior items and returns the number
 // it imported, and an optional error
-func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks) (int, error) {
+func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (int, error) {
 	// total := len(ts)
 	var imported int
 	// Erase the defaults
 	p.Default = Task{}
-	for _, twItem := range ts {
-		if twItem.Status == "deleted" {
-			log.Warn("skipping deleted task since we don't really do deleted in the poet thing", "description", twItem.Description)
-			continue
+	total := len(ts)
+	for idx, twItem := range ts {
+		s := ProgressStatus{
+			Current: int64(idx),
+			Total:   int64(total),
+			Info:    fmt.Sprintf("Importing: %v", twItem.Description),
 		}
 		if twItem.Mask != "" {
-			log.Warn("skipping item with a recursion mask since we don't really do that yet", "description", twItem.Description)
+			s.Warning = fmt.Sprintf("Skipping item with recursion mask since we know how to handle it yet: %v", twItem.Description)
+			pushStatus(c, s)
 			continue
 		}
-		t := &Task{
-			Description: twItem.Description,
-			ID:          twItem.UUID,
-			Tags:        twItem.Tags,
-			Due:         (*time.Time)(twItem.Due),
-			Completed:   (*time.Time)(twItem.End),
-			HideUntil:   (*time.Time)(twItem.Wait),
-			Reviewed:    (*time.Time)(twItem.Reviewed),
-			CancelAfter: (*time.Time)(twItem.Until),
-		}
-		if twItem.Entry == nil {
-			t.Added = time.Now()
-		} else {
-			t.Added = time.Time(*twItem.Entry)
-		}
-		if twItem.Annotations != nil {
-			t.Comments = make([]Comment, len(twItem.Annotations))
-			for idx, a := range twItem.Annotations {
-				t.Comments[idx].Comment = a.Description
-				t.Comments[idx].Added = time.Time(*a.Entry)
-			}
-		}
+		t := NewTask(WithTaskWarriorTask(twItem))
 		if (t.HideUntil != nil) && (t.Due != nil) && t.HideUntil.After(*t.Due) {
-			log.Warn("importing task: Due was after HideUntil, so we tweaked that")
+			s.Warning = fmt.Sprintf("importing task, Due was after HideUntil, so we tweaked that: %v", twItem.Description)
 			nh := t.Due.Add(-1 * time.Minute)
 			t.HideUntil = &nh
-			// twItem.Due = twItem.Wait + (1 * time.Minute)
 		}
 
-		_, err := p.Task.Add(t)
-		if err != nil {
-			log.With("err", err).Warn("error importing task", "task", twItem.Description)
+		if _, err := p.Task.Add(t); err != nil && err != errExists {
+			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
 		} else {
 			imported++
 		}
+		pushStatus(c, s)
 	}
 	return imported, nil
+}
+
+func pushStatus(c chan ProgressStatus, s ProgressStatus) {
+	if c != nil {
+		c <- s
+	}
 }

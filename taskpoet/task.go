@@ -415,7 +415,7 @@ func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
 	if !o.IsExisting {
 		_, err := svc.GetWithID(t.ID, t.PluginID, "")
 		if err == nil {
-			return fmt.Errorf("Task with ID %v already exists", t.ID)
+			return errExists
 		}
 	}
 
@@ -679,7 +679,7 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
 		if perr := bucket.Put(t.DetectKeyPath(), taskSerial); perr != nil {
-			return err
+			return perr
 		}
 		return nil
 	})
@@ -792,6 +792,35 @@ func WithCompleted(d *time.Time) TaskOption {
 func WithHideUntil(d *time.Time) TaskOption {
 	return func(t *Task) {
 		t.HideUntil = d
+	}
+}
+
+// WithTaskWarriorTask imports a task from a task warrior task
+func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
+	return func(t *Task) {
+		t.Description = twItem.Description
+		t.ID = twItem.UUID
+		t.Tags = twItem.Tags
+		t.Due = (*time.Time)(twItem.Due)
+		t.Completed = (*time.Time)(twItem.End)
+		t.HideUntil = (*time.Time)(twItem.Wait)
+		t.Reviewed = (*time.Time)(twItem.Reviewed)
+		t.CancelAfter = (*time.Time)(twItem.Until)
+		if twItem.Status == "deleted" {
+			t.Deleted = (*time.Time)(twItem.End)
+		}
+		if twItem.Entry == nil {
+			t.Added = time.Now()
+		} else {
+			t.Added = time.Time(*twItem.Entry)
+		}
+		if twItem.Annotations != nil {
+			t.Comments = make([]Comment, len(twItem.Annotations))
+			for idx, a := range twItem.Annotations {
+				t.Comments[idx].Comment = a.Description
+				t.Comments[idx].Added = time.Time(*a.Entry)
+			}
+		}
 	}
 }
 

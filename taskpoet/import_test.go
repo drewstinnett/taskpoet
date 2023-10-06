@@ -33,7 +33,7 @@ func TestTWImport(t *testing.T) {
 			Annotations: []TWAnnotation{{Entry: &pastT, Description: "This is an annotation"}},
 		},
 	}
-	got, err := p.ImportTaskWarrior(ts)
+	got, err := p.ImportTaskWarrior(ts, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(ts), got)
 }

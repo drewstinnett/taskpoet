@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
@@ -28,7 +30,14 @@ $ taskpoet import /tmp/tw.backup.json `,
 		checkErr(json.Unmarshal(b, &tasks))
 
 		log.Info("Importing items", "count", len(tasks))
-		imported, err := poetC.ImportTaskWarrior(tasks)
+		c := make(chan taskpoet.ProgressStatus)
+		go func() {
+			if _, terr := tea.NewProgram(taskpoet.NewProgressBar(taskpoet.WithStatusChannel(c))).Run(); err != nil {
+				fmt.Println("Error running program:", terr)
+				os.Exit(1)
+			}
+		}()
+		imported, err := poetC.ImportTaskWarrior(tasks, c)
 		checkErr(err)
 
 		log.Info("imported tasks", "count", imported)

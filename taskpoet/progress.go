@@ -1,4 +1,4 @@
-package cmd
+package taskpoet
 
 import (
 	"time"
@@ -14,33 +14,44 @@ var (
 	warningIcon = lipgloss.NewStyle().Foreground(lipgloss.Color("63")).SetString("⚠️")
 )
 
-type model struct {
-	// packages []string
-	width    int
-	height   int
-	spinner  spinner.Model
-	progress progress.Model
-	done     bool
-	statusC  chan status
-	status   status
-	// title    string
-}
-
-func (m model) Init() tea.Cmd {
-	return tea.Batch(readStatus(m.statusC), m.spinner.Tick)
-}
-
-func readStatus(s chan status) tea.Cmd {
+func readStatus(s chan ProgressStatus) tea.Cmd {
 	return tea.Tick(time.Millisecond, func(t time.Time) tea.Msg {
 		st := <-s
 		return statusMsg(st)
 	})
 }
 
-type statusMsg status
+// ProgressStatus is a helper to show a progress bar on a bunch of item things
+type ProgressStatus struct {
+	Current int64
+	Total   int64
+	Info    string
+	Warning string
+	Done    bool
+}
 
-// msg is the result of an io operation
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// ProgressModel represents our fancy little progress bar
+type ProgressModel struct {
+	// packages []string
+	width    int
+	height   int
+	spinner  spinner.Model
+	progress progress.Model
+	// done     bool
+	statusC chan ProgressStatus
+	status  ProgressStatus
+	// title    string
+}
+
+// Init satisfies the model interface
+func (m ProgressModel) Init() tea.Cmd {
+	return tea.Batch(readStatus(m.statusC), m.spinner.Tick)
+}
+
+type statusMsg ProgressStatus
+
+// Update satiesfies the model interface
+func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -74,7 +85,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+// View satisfies the model interface
+func (m ProgressModel) View() string {
 	// n := m.status.Total
 	// w := lipgloss.Width(fmt.Sprintf("%d", n))
 
@@ -98,16 +110,18 @@ func (m model) View() string {
 	return spin + prog + gap + info
 }
 
-func withStatusChannel(s chan status) func(*model) {
-	return func(m *model) {
+// WithStatusChannel sets the channel on a new object
+func WithStatusChannel(s chan ProgressStatus) func(*ProgressModel) {
+	return func(m *ProgressModel) {
 		m.statusC = s
 	}
 }
 
-func new(options ...func(*model)) model {
+// NewProgressBar returns a new progress bar
+func NewProgressBar(options ...func(*ProgressModel)) ProgressModel {
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-	m := model{
+	m := ProgressModel{
 		spinner: s,
 		progress: progress.New(
 			// progress.WithDefaultGradient(),
@@ -120,12 +134,4 @@ func new(options ...func(*model)) model {
 		opt(&m)
 	}
 	return m
-}
-
-type status struct {
-	Current int64
-	Total   int64
-	Info    string
-	Warning string
-	Done    bool
 }

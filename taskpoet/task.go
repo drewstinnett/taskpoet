@@ -18,21 +18,22 @@ var prefixes []string
 
 // Task is the actual task item
 type Task struct {
-	ID           string     `json:"id"`
-	PluginID     string     `json:"plugin_id"`
-	Description  string     `json:"description"`
-	Due          *time.Time `json:"due,omitempty"`
-	HideUntil    *time.Time `json:"hide_until,omitempty"`   // HideUntil is similar to 'wait' in taskwarrior
-	CancelAfter  *time.Time `json:"cancel_after,omitempty"` // CancelAfter is similar to 'until' in taskwarrior
-	Completed    *time.Time `json:"completed,omitempty"`
-	Reviewed     *time.Time `json:"reviewed,omitempty"`
-	Added        time.Time  `json:"added,omitempty"`
-	EffortImpact uint       `json:"effort_impact"`
-	Children     []string   `json:"children,omitempty"`
-	Parents      []string   `json:"parents,omitempty"`
-	Tags         []string   `json:"tags,omitempty"`
-	Comments     []Comment  `json:"comments,omitempty"`
-	Project      string     `json:"project,omitempty"`
+	ID           string       `json:"id"`
+	PluginID     string       `json:"plugin_id"`
+	Description  string       `json:"description"`
+	Due          *time.Time   `json:"due,omitempty"`
+	HideUntil    *time.Time   `json:"hide_until,omitempty"`   // HideUntil is similar to 'wait' in taskwarrior
+	CancelAfter  *time.Time   `json:"cancel_after,omitempty"` // CancelAfter is similar to 'until' in taskwarrior
+	Completed    *time.Time   `json:"completed,omitempty"`
+	Reviewed     *time.Time   `json:"reviewed,omitempty"`
+	Deleted      *time.Time   `json:"deleted,omitempty"`
+	Added        time.Time    `json:"added,omitempty"`
+	EffortImpact EffortImpact `json:"effort_impact"`
+	Children     []string     `json:"children,omitempty"`
+	Parents      []string     `json:"parents,omitempty"`
+	Tags         []string     `json:"tags,omitempty"`
+	Comments     []Comment    `json:"comments,omitempty"`
+	Project      string       `json:"project,omitempty"`
 }
 
 // Comment is just a little comment/note on a task
@@ -70,19 +71,18 @@ func (t Tasks) Less(i, j int) bool {
 // DetectKeyPath finds the key path for a given task
 func (t *Task) DetectKeyPath() []byte {
 	// Is this a new active task, or just logging completed?
-	var keyPath string
-	var pluginID string
-	if t.PluginID == "" {
-		pluginID = DefaultPluginID
-	} else {
+	pluginID := DefaultPluginID
+	if t.PluginID != "" {
 		pluginID = t.PluginID
 	}
-	if t.Completed == nil {
-		keyPath = filepath.Join("/active", pluginID, t.ID)
-	} else {
-		keyPath = filepath.Join("/completed", pluginID, t.ID)
+	switch {
+	case t.Deleted != nil:
+		return []byte(filepath.Join("/deleted", pluginID, t.ID))
+	case t.Completed != nil:
+		return []byte(filepath.Join("/completed", pluginID, t.ID))
+	default:
+		return []byte(filepath.Join("/active", pluginID, t.ID))
 	}
-	return []byte(keyPath)
 }
 
 func (t *Task) setDefaults(d *Task) {
@@ -139,8 +139,8 @@ type TaskService interface {
 	// Should we use this instead of above funcs?
 	AddOrEditSet(tasks []Task) error
 
-	// Delete
-	Delete(t *Task) error
+	// Purge completely removes a task out of the DB
+	Purge(t *Task) error
 
 	// Complete a task
 	Complete(t *Task) error
@@ -340,8 +340,8 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error { //nolint:funlen,gocognit
 	return nil
 }
 
-// Delete deletes a task
-func (svc *TaskServiceOp) Delete(t *Task) error {
+// Purge removes a task from the database
+func (svc *TaskServiceOp) Purge(t *Task) error {
 	originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 	if err != nil {
 		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
@@ -589,23 +589,20 @@ func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 
 // Complete marks a task as completed
 func (svc *TaskServiceOp) Complete(t *Task) error {
-	now := time.Now()
 	activePath := t.DetectKeyPath()
-	t.Completed = &now
+	t.Completed = nowPTR()
 	completePath := t.DetectKeyPath()
-	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+	if err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		taskSerial, err := json.Marshal(t)
 		if err != nil {
 			return err
 		}
-		err = b.Put(completePath, taskSerial)
-		if err != nil {
-			return err
+		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+		if perr := b.Put(completePath, taskSerial); perr != nil {
+			return perr
 		}
 		return b.Delete(activePath)
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	return nil
@@ -699,13 +696,12 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 
 	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err := bucket.ForEach(func(k, v []byte) error {
+		if err := bucket.ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				allIDs = append(allIDs, string(k))
 			}
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		return nil
@@ -752,4 +748,59 @@ func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// TaskOption is a functional option for a new Task
+type TaskOption func(*Task)
+
+// WithEffortImpact sets the impact statement on create
+func WithEffortImpact(e EffortImpact) TaskOption {
+	return func(t *Task) {
+		t.EffortImpact = e
+	}
+}
+
+// WithDescription sets the description on create
+func WithDescription(d string) TaskOption {
+	return func(t *Task) {
+		t.Description = d
+	}
+}
+
+// WithTags sets the tags on create
+func WithTags(s []string) TaskOption {
+	return func(t *Task) {
+		t.Tags = s
+	}
+}
+
+// WithDue sets the due date on create
+func WithDue(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.Due = d
+	}
+}
+
+// WithCompleted sets the completed date on create
+func WithCompleted(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.Completed = d
+	}
+}
+
+// WithHideUntil sets the hide until on create
+func WithHideUntil(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.HideUntil = d
+	}
+}
+
+// NewTask returns a new task given functional options
+func NewTask(options ...TaskOption) *Task {
+	task := &Task{}
+	for _, opt := range options {
+		opt(task)
+	}
+
+	return task
 }

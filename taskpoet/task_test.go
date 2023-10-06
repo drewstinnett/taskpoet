@@ -3,7 +3,6 @@ package taskpoet
 import (
 	"fmt"
 	"os"
-	"path"
 	"strings"
 	"testing"
 	"time"
@@ -22,12 +21,14 @@ var (
 	testDBPath    string
 )
 
+/*
 func newTestPoet(t *testing.T) (*Poet, string) {
 	dbPath := path.Join(t.TempDir(), "testtaskpoet.db")
 	p, err := New(WithDatabasePath(dbPath))
 	panicIfErr(err)
 	return p, testDBPath
 }
+*/
 
 func setup() {
 	// Init a db
@@ -535,7 +536,7 @@ func TestDefaultBucketName(t *testing.T) {
 	assert.Equal(t, n, "/default/tasks")
 }
 
-func TestDeleteTask(t *testing.T) {
+func TestPurgeTask(t *testing.T) {
 	added, err := lc.Task.Add(&Task{
 		ID:          "delete-me",
 		Description: "foo",
@@ -543,7 +544,7 @@ func TestDeleteTask(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete it now
-	require.NoError(t, lc.Task.Delete(added))
+	require.NoError(t, lc.Task.Purge(added))
 
 	_, err = lc.Task.GetWithID("delete-me", "", "")
 	if err == nil {
@@ -563,6 +564,14 @@ func TestDetectKeyPath(t *testing.T) {
 		{
 			task:   Task{ID: "foo", Description: "bar", PluginID: "plugin-1"},
 			wanted: "/active/plugin-1/foo",
+		},
+		{
+			task:   Task{ID: "foo", Description: "bar", Deleted: nowPTR()},
+			wanted: "/deleted/builtin/foo",
+		},
+		{
+			task:   Task{ID: "foo", Description: "bar", Completed: nowPTR()},
+			wanted: "/completed/builtin/foo",
 		},
 	}
 
@@ -614,11 +623,26 @@ func TestEditExistingValues(t *testing.T) {
 }
 
 func TestCompleteIDs(t *testing.T) {
-	p, db := newTestPoet(t)
-	defer os.RemoveAll(db)
+	p := newTestPoet(t)
 	p.Task.Add(&Task{Description: "This is foo"})
 	p.Task.Add(&Task{Description: "This is bar"})
 	got := p.CompleteIDsWithPrefix("/active", "bar")
 	require.True(t, strings.HasSuffix(got[0], "\tThis is bar"))
 	require.Equal(t, 1, len(got))
+}
+
+func TestTaskTable(t *testing.T) {
+	p := newTestPoet(t)
+	_, err := p.Task.Add(NewTask(WithDescription("draw a table and test it")))
+	require.NoError(t, err)
+
+	table := p.TaskTable(TableOpts{
+		Prefix:  "/active",
+		Columns: []string{"Description"},
+	})
+	require.Contains(
+		t,
+		fmt.Sprint(strings.TrimSpace(table)),
+		"draw a table and test it",
+	)
 }

@@ -1,14 +1,36 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
 )
+
+func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
+	opts := []taskpoet.TaskOption{
+		taskpoet.WithEffortImpact(taskpoet.EffortImpact(mustGetCmd[uint](cmd, "effort-impact"))),
+		taskpoet.WithDescription(strings.Join(args, " ")),
+		taskpoet.WithTags(mustGetCmd[[]string](cmd, "tag")),
+	}
+
+	now := time.Now()
+	dueIn := mustGetCmd[string](cmd, "due")
+	if dueIn != "" {
+		due := now.Add(taskpoet.MustParseDuration(dueIn))
+		opts = append(opts, taskpoet.WithDue(&due))
+	}
+
+	hideIn := mustGetCmd[string](cmd, "wait")
+	if hideIn != "" {
+		hide := now.Add(taskpoet.MustParseDuration(hideIn))
+		opts = append(opts, taskpoet.WithHideUntil(&hide))
+	}
+
+	return taskpoet.NewTask(opts...)
+}
 
 // addCmd represents the add command
 var addCmd = &cobra.Command{
@@ -16,72 +38,31 @@ var addCmd = &cobra.Command{
 	Short:   "Add a new task",
 	Args:    cobra.MinimumNArgs(1),
 	Aliases: []string{"a"},
-	Example: `$ taskpoet add "Learn a new skill"
+	Example: `Add a new task by giving the description as an argument:
+$ taskpoet add "Learn a new skill"
+
+For us lazy folks, you can also leave the quotes out:
+$ taskpoet add Learn a new skill
+
+Set an Effort/Impact to a new task:
 $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 	Long:              `Add new task`,
 	ValidArgsFunction: noComplete,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Put some basics up here
-		var err error
+		// t := taskWithCmd(cmd, args)
 
-		// Make sure this is between 0 and 4
-		effortImpact, _ := cmd.PersistentFlags().GetUint("effort-impact")
-		if effortImpact > 4 {
-			log.Fatal("EfforImpact assessment must be less than 5")
-		}
-
-		// Due Date parsing
-		dueS, _ := cmd.PersistentFlags().GetString("due")
-		var due time.Duration
-		if dueS != "" {
-			due, err = taskpoet.ParseDuration(dueS)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		// Get Tags
-		tags, _ := cmd.PersistentFlags().GetStringSlice("tag")
-
-		// HideUntil parsing
-		waitS, _ := cmd.PersistentFlags().GetString("wait")
-		var wait time.Duration
-		if waitS != "" {
-			wait, err = taskpoet.ParseDuration(waitS)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		parentS, _ := cmd.PersistentFlags().GetString("parent")
-
-		t := &taskpoet.Task{
-			Description:  strings.Join(args, " "),
-			EffortImpact: effortImpact,
-			Tags:         tags,
-		}
-
-		// Did we specify a due date?
-		now := time.Now()
-		if float64(due.Nanoseconds()) != float64(0) {
-			d := now.Add(due)
-			t.Due = &d
-		}
-		if wait.Nanoseconds() != 0 {
-			h := now.Add(wait)
-			t.HideUntil = &h
-		}
-
-		found, err := poetC.Task.Add(t)
+		added, err := poetC.Task.Add(taskWithCmd(cmd, args))
 		checkErr(err)
+
+		parentS := mustGetCmd[string](cmd, "parent")
 		if parentS != "" {
 			parent, err := poetC.Task.GetWithPartialID(parentS, "", "")
 			checkErr(err)
 			if parent != nil {
-				checkErr(poetC.Task.AddParent(t, parent))
+				checkErr(poetC.Task.AddParent(added, parent))
 			}
 		}
-		fmt.Printf("Added task '%v'\n", found.Description)
+		log.Info("Added task", "description", added.Description)
 	},
 }
 

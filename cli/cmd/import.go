@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
-	"log"
 	"os"
+
+	"github.com/charmbracelet/log"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
@@ -24,14 +25,13 @@ $ taskpoet import /tmp/tw.backup.json `,
 		b, err := os.ReadFile(args[0])
 		checkErr(err)
 		var tasks taskpoet.TaskWarriorTasks
-		err = json.Unmarshal(b, &tasks)
-		checkErr(err)
+		checkErr(json.Unmarshal(b, &tasks))
 
-		log.Printf("Importing %v items", len(tasks))
+		log.Info("Importing items", "count", len(tasks))
 		imported, err := poetC.ImportTaskWarrior(tasks)
 		checkErr(err)
 
-		log.Printf("imported tasks: %v", imported)
+		log.Info("imported tasks", "count", imported)
 	},
 }
 

@@ -2,7 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/charmbracelet/log"
 
 	// Include all plugins
 	_ "github.com/drewstinnett/taskpoet/plugins/task/all"

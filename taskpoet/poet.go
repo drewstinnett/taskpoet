@@ -4,6 +4,7 @@ Package taskpoet is the main worker library
 package taskpoet
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/mitchellh/go-homedir"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/term"
@@ -33,6 +35,15 @@ func failure(err error) Option {
 	return func() (func(*Poet), error) {
 		return nil, err
 	}
+}
+
+// MustNew returns a new poet object or panics
+func MustNew(options ...Option) *Poet {
+	got, err := New(options...)
+	if err != nil {
+		panic(err)
+	}
+	return got
 }
 
 // New returns a new poet object and optional error
@@ -97,13 +108,21 @@ func WithNamespace(n string) Option {
 	})
 }
 
+// WithRecurringTasks sets the recurring tasks for a poet
+func WithRecurringTasks(r RecurringTasks) Option {
+	return success(func(p *Poet) {
+		p.RecurringTasks = r
+	})
+}
+
 // Poet is the main operator for this whole thing
 type Poet struct {
-	DB        *bolt.DB
-	Namespace string
-	Default   Task
-	Task      TaskService
-	dbPath    string
+	DB             *bolt.DB
+	Namespace      string
+	Default        Task
+	Task           TaskService
+	dbPath         string
+	RecurringTasks RecurringTasks
 }
 
 // initDB initializes the database
@@ -151,13 +170,14 @@ const (
 )
 
 var (
-	docStyle  = lipgloss.NewStyle().Padding(1, 2, 1, 2)
+	docStyle  = lipgloss.NewStyle().Padding(0, 2, 0, 2)
 	subtle    = lipgloss.AdaptiveColor{Light: "#f3f4f0", Dark: "#383838"}
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 
 	header = lipgloss.NewStyle().
 		Foreground(highlight).
+		Underline(true).
 		Padding(0, 1, 0, 1)
 	entry    = lipgloss.NewStyle().Foreground(special).Padding(0, 1, 0, 1)
 	entryAlt = lipgloss.NewStyle().Foreground(special).Background(subtle).Padding(0, 1, 0, 1)
@@ -169,6 +189,7 @@ type TableOpts struct {
 	FilterParams FilterParams
 	Filters      []Filter
 	Columns      []string
+	SortBy       any
 }
 
 // MustList returns tasks from a prefix or panics
@@ -180,43 +201,20 @@ func (p Poet) MustList(s string) Tasks {
 	return tasks
 }
 
+const descriptionColumnName = "Description"
+
 var columnMap map[string]func(Task) string = map[string]func(Task) string{
-	"ID":          func(t Task) string { return t.ShortID() },
-	"Age":         func(t Task) string { return t.Added.Format("2006-01-02") },
-	"Description": func(t Task) string { return t.Description },
-	"Due":         func(t Task) string { return t.DueString() },
-	"Tags":        func(t Task) string { return strings.Join(t.Tags, ",") },
+	"ID":                  func(t Task) string { return t.ShortID() },
+	"Age":                 func(t Task) string { return t.Added.Format("2006-01-02") },
+	descriptionColumnName: func(t Task) string { return t.Description },
+	"Due":                 func(t Task) string { return t.DueString() },
+	"Tags":                func(t Task) string { return strings.Join(t.Tags, ",") },
 	"Completed": func(t Task) string {
 		if t.Completed == nil {
 			return ""
 		}
 		return t.Completed.Format("2006-01-02")
 	},
-}
-
-var columnSizeMap map[string]int = map[string]int{
-	"ID":          8,
-	"Age":         15,
-	"Description": 50,
-	"Due":         15,
-	"Tags":        15,
-	"Completed":   15,
-}
-
-func columnSize(s string) (int, error) {
-	val, ok := columnSizeMap[s]
-	if !ok {
-		return 0, fmt.Errorf("column size not defined: %v", s)
-	}
-	return val, nil
-}
-
-func mustColumnSize(s string) int {
-	got, err := columnSize(s)
-	if err != nil {
-		panic(err)
-	}
-	return got
 }
 
 func columnValue(s string, t Task) (string, error) {
@@ -235,18 +233,46 @@ func mustColumnValue(s string, t Task) string {
 	return got
 }
 
-func iterateColumnHeaders(c []string) []string {
+func getTaskColumn(name string, d []Task) (taskColumn, error) {
+	switch name {
+	case "ID":
+		return &shortIDCol{}, nil
+	case "Age":
+		return &ageCol{}, nil
+	case "Due":
+		return &dueCol{}, nil
+	case descriptionColumnName:
+		return &descriptionCol{tasks: d}, nil
+	case "Completed":
+		return &completedCol{}, nil
+	case "Tags":
+		return &tagsCol{tasks: d}, nil
+	default:
+		return nil, fmt.Errorf("unknown columnn: %v", name)
+	}
+}
+
+func iterateColumnHeaders(c []string, d []Task) []string {
 	ret := make([]string, len(c))
 	for idx, item := range c {
-		ret[idx] = header.Width(mustColumnSize(item)).Render(item)
+		cl, err := getTaskColumn(item, d)
+		if err != nil {
+			panic(err)
+		}
+		ret[idx] = header.Width(cl.Width()).Render(item)
 	}
 	return ret
 }
 
-func iterateColumnValues(c []string, t Task, s lipgloss.Style) []string {
+func iterateColumnValues(c []string, t Task, d []Task, s lipgloss.Style) []string {
 	ret := make([]string, len(c))
 	for idx, item := range c {
-		ret[idx] = s.Width(mustColumnSize(item)).Render(mustColumnValue(item, t))
+		// ret[idx] = s.Width(mustColumnSize(item)).Render(mustColumnValue(item, t))
+		cl, err := getTaskColumn(item, d)
+		if err != nil {
+			panic(err)
+		}
+		ret[idx] = s.Width(cl.Width()).Render(mustColumnValue(item, t))
 	}
 	return ret
 }
@@ -262,20 +288,30 @@ func columnsOrDefault(c []string) []string {
 // TaskTable returns a table of the given tasks
 // func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
 func (p *Poet) TaskTable(opts TableOpts) string {
+	if rerr := p.checkRecurring(); rerr != nil {
+		log.Warn("problem looking up recurring tasks", "err", rerr)
+	}
 	tasks := ApplyFilters(p.MustList(opts.Prefix), &opts.FilterParams, opts.Filters...)
-	sort.Sort(tasks)
 	allTasksLen := len(tasks)
+	switch opts.SortBy.(type) {
+	case ByDue:
+		sort.Sort(ByDue(tasks))
+	case ByCompleted:
+		sort.Sort(ByCompleted(tasks))
+	default:
+		sort.Sort(tasks)
+	}
 	if opts.FilterParams.Limit > 0 {
 		tasks = tasks[0:min(len(tasks), opts.FilterParams.Limit)]
 	}
 
 	columns := columnsOrDefault(opts.Columns)
 
-	dLen := min(longestDescription(tasks)+5, 50)
 	row := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		iterateColumnHeaders(columns)...,
+		iterateColumnHeaders(columns, tasks)...,
 	)
+	headerLen := lipgloss.Width(row)
 	doc := strings.Builder{}
 	doc.WriteString(row + "\n")
 
@@ -283,21 +319,21 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 		rs := altRowStyle(idx, entry, entryAlt)
 		row := lipgloss.JoinHorizontal(
 			lipgloss.Top,
-			iterateColumnValues(columns, task, rs)...,
+			iterateColumnValues(columns, task, tasks, rs)...,
 		)
 		doc.WriteString(row + "\n")
 	}
-	addLimitWarning(&doc, 53+dLen, opts.FilterParams.Limit, allTasksLen)
+	addLimitWarning(&doc, headerLen-4, opts.FilterParams.Limit, allTasksLen)
 
 	w, _, _ := term.GetSize(int(os.Stdout.Fd()))
-	if w > 0 {
-		docStyle = docStyle.MaxWidth(w)
-	}
+	maxW := max(w, headerLen)
+	log.Debug("setting max window size", "size", maxW)
+	docStyle = docStyle.MaxWidth(maxW)
 	return docStyle.Render(doc.String())
 }
 
 func addLimitWarning(doc io.StringWriter, width, limit, total int) {
-	if limit < total {
+	if (limit > 0) && limit < total {
 		_, _ = doc.WriteString(
 			lipgloss.NewStyle().Width(width).Align(lipgloss.Right).Italic(true).Render(
 				fmt.Sprintf("* %v more records to display, increase the limit to see it",
@@ -376,4 +412,96 @@ func altRowStyle(idx int, even, odd lipgloss.Style) lipgloss.Style {
 		return even
 	}
 	return odd
+}
+
+// ByDue is the by due date sorter
+type ByDue Tasks
+
+func (a ByDue) Len() int { return len(a) }
+func (a ByDue) Less(i, j int) bool {
+	if a[i].Due == nil {
+		return false
+	}
+	if a[j].Due == nil {
+		return true
+	}
+	return !a[j].Due.Before(*a[i].Due)
+}
+func (a ByDue) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// ByCompleted is the by completed date sorter
+type ByCompleted Tasks
+
+func (a ByCompleted) Len() int { return len(a) }
+func (a ByCompleted) Less(i, j int) bool {
+	if a[i].Completed == nil {
+		return false
+	}
+	if a[j].Completed == nil {
+		return true
+	}
+	return a[j].Completed.Before(*a[i].Completed)
+}
+func (a ByCompleted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+type taskColumn interface {
+	String() string
+	Width() int
+}
+
+type shortIDCol struct{}
+
+func (c shortIDCol) String() string { return "ID" }
+func (c shortIDCol) Width() int     { return 8 }
+
+type ageCol struct {
+	name string
+}
+
+func (a ageCol) String() string { return a.name }
+func (a ageCol) Width() int     { return 15 }
+
+type dueCol struct{}
+
+func (d dueCol) String() string { return "Due" }
+func (d dueCol) Width() int     { return 15 }
+
+type descriptionCol struct {
+	tasks Tasks
+}
+
+func (d descriptionCol) String() string { return descriptionColumnName }
+func (d descriptionCol) Width() int     { return min(55, longestDescription(d.tasks)+3) }
+
+type tagsCol struct {
+	tasks Tasks
+}
+
+func (t tagsCol) String() string { return "Tags" }
+func (t tagsCol) Width() int     { return 15 }
+
+type completedCol struct{}
+
+func (d completedCol) String() string { return "Completed" }
+func (d completedCol) Width() int     { return 13 }
+
+// Delete marks a task as deleted
+func (p *Poet) Delete(t *Task) error {
+	curPath := t.DetectKeyPath()
+	t.Deleted = nowPTR()
+	newPath := t.DetectKeyPath()
+	if err := p.DB.Update(func(tx *bolt.Tx) error {
+		taskSerial, err := json.Marshal(t)
+		if err != nil {
+			return err
+		}
+		b := tx.Bucket([]byte(p.Task.BucketName()))
+		if perr := b.Put(newPath, taskSerial); perr != nil {
+			return perr
+		}
+		return b.Delete(curPath)
+	}); err != nil {
+		return err
+	}
+	return nil
 }

@@ -23,6 +23,15 @@ var unitMap = map[string]int64{
 	"M":  int64(time.Hour) * 720,
 }
 
+// MustParseDuration parses a duration or panics
+func MustParseDuration(s string) time.Duration {
+	got, err := ParseDuration(s)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
 // ParseDuration parses a duration string.
 // A duration string is a possibly signed sequence of
 // decimal numbers, each with optional fraction and a unit suffix,
@@ -244,4 +253,9 @@ func ContainsString(s []string, str string) bool {
 	}
 
 	return false
+}
+
+func nowPTR() *time.Time {
+	t := time.Now()
+	return &t
 }

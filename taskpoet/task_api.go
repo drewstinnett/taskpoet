@@ -3,7 +3,7 @@ package taskpoet
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 
 	. "github.com/ahmetb/go-linq/v3" // nolint
@@ -29,7 +29,7 @@ func taskAPIAdd(c *gin.Context) {
 		c.AbortWithStatusJSON(500, map[string]string{"message": "Must post a Task or Tasks json object"})
 		return
 	}
-	jsonData, err := ioutil.ReadAll(c.Request.Body)
+	jsonData, err := io.ReadAll(c.Request.Body)
 	checkAPIErr(c, err)
 	jsonDataS := string(jsonData)
 
@@ -136,7 +136,7 @@ func taskAPIEdit(c *gin.Context) {
 	}
 
 	var editTask Task
-	jsonData, err := ioutil.ReadAll(c.Request.Body)
+	jsonData, err := io.ReadAll(c.Request.Body)
 	checkAPIErr(c, err)
 	err = json.Unmarshal(jsonData, &editTask)
 	checkAPIErr(c, err)
@@ -159,7 +159,7 @@ func taskAPIDelete(c *gin.Context) {
 		return
 	}
 
-	err = client.Task.Delete(task)
+	err = client.Task.Purge(task)
 	checkAPIErr(c, err)
 	c.JSON(200, "")
 }

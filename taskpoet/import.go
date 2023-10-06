@@ -1,9 +1,10 @@
 package taskpoet
 
 import (
-	"log"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 // TWTime is the format that TaskWarrior uses for timestamps
@@ -42,6 +43,7 @@ type TaskWarriorTask struct {
 	End         *TWTime        `json:"end,omitempty"`
 	Reviewed    *TWTime        `json:"reviewed,omitempty"`
 	Until       *TWTime        `json:"until,omitempty"`
+	Mask        string         `json:"mask,omitempty"`
 	Urgency     float64        `json:"urgency,omitempty"`
 	Tags        []string       `json:"tags,omitempty"`
 	Annotations []TWAnnotation `json:"annotations,omitempty"`
@@ -61,16 +63,32 @@ type TaskWarriorTasks []TaskWarriorTask
 func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks) (int, error) {
 	// total := len(ts)
 	var imported int
+	// Erase the defaults
+	p.Default = Task{}
 	for _, twItem := range ts {
+		if twItem.Status == "deleted" {
+			log.Warn("skipping deleted task since we don't really do deleted in the poet thing", "description", twItem.Description)
+			continue
+		}
+		if twItem.Mask != "" {
+			log.Warn("skipping item with a recursion mask since we don't really do that yet", "description", twItem.Description)
+			continue
+		}
 		t := &Task{
 			Description: twItem.Description,
 			ID:          twItem.UUID,
 			Tags:        twItem.Tags,
+			Due:         (*time.Time)(twItem.Due),
+			Completed:   (*time.Time)(twItem.End),
+			HideUntil:   (*time.Time)(twItem.Wait),
+			Reviewed:    (*time.Time)(twItem.Reviewed),
+			CancelAfter: (*time.Time)(twItem.Until),
 		}
-		t.Due = (*time.Time)(twItem.Due)
-		t.Completed = (*time.Time)(twItem.End)
-		t.HideUntil = (*time.Time)(twItem.Wait)
-		t.Reviewed = (*time.Time)(twItem.Reviewed)
+		if twItem.Entry == nil {
+			t.Added = time.Now()
+		} else {
+			t.Added = time.Time(*twItem.Entry)
+		}
 		if twItem.Annotations != nil {
 			t.Comments = make([]Comment, len(twItem.Annotations))
 			for idx, a := range twItem.Annotations {
@@ -78,9 +96,8 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks) (int, error) {
 				t.Comments[idx].Added = time.Time(*a.Entry)
 			}
 		}
-		t.CancelAfter = (*time.Time)(twItem.Until)
 		if (t.HideUntil != nil) && (t.Due != nil) && t.HideUntil.After(*t.Due) {
-			log.Printf("warn: importing task: Due was after HideUntil, so we tweaked that")
+			log.Warn("importing task: Due was after HideUntil, so we tweaked that")
 			nh := t.Due.Add(-1 * time.Minute)
 			t.HideUntil = &nh
 			// twItem.Due = twItem.Wait + (1 * time.Minute)
@@ -88,7 +105,7 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks) (int, error) {
 
 		_, err := p.Task.Add(t)
 		if err != nil {
-			log.Printf("error importing task: %v (%v)", twItem.Description, err)
+			log.With("err", err).Warn("error importing task", "task", twItem.Description)
 		} else {
 			imported++
 		}

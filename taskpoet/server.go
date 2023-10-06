@@ -3,13 +3,12 @@ package taskpoet
 import (
 	"embed"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"path"
 	"strconv"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/cors"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,10 +36,10 @@ func NewRouter(rc *RouterConfig) *gin.Engine {
 		rc = &RouterConfig{}
 	}
 	if !rc.Debug {
-		slog.Warn("Running in release mode")
+		log.Warn("Running in release mode")
 		gin.SetMode(gin.ReleaseMode)
 	} else {
-		slog.Warn("Running in debug mode")
+		log.Warn("Running in debug mode")
 		gin.SetMode(gin.DebugMode)
 	}
 

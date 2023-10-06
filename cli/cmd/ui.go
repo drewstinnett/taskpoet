@@ -16,7 +16,7 @@ var uiCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("ui called")
 		p := ui.NewUI(poetC)
-		if err := p.Start(); err != nil {
+		if _, err := p.Run(); err != nil {
 			fmt.Printf("Alas, there's been an error: %v", err)
 			os.Exit(1)
 		}

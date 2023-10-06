@@ -17,28 +17,32 @@ var getCompleteCmd = &cobra.Command{
 	Long: `Get Completed Tasks
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		limit, err := cmd.PersistentFlags().GetInt("limit")
-		checkErr(err)
+		// limit, err := cmd.PersistentFlags().GetInt("limit")
+		// checkErr(err)
+		// tableOpts := mustTableOptsWithCmd(cmd, args)
+		tableOpts := &taskpoet.TableOpts{
+			Prefix:  "/completed",
+			Columns: []string{"ID", "Description", "Completed", "Tags"},
+			SortBy:  taskpoet.ByCompleted{},
+			Filters: []taskpoet.Filter{
+				taskpoet.FilterRegex,
+				taskpoet.FilterHidden,
+			},
+		}
+		checkErr(applyCobra(cmd, args, tableOpts))
 		var results []taskpoet.Task
-		results, err = poetC.Task.List("/completed")
+		results, err := poetC.Task.List("/completed")
 		checkErr(err)
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Added.Before(results[j].Added)
 		})
 
-		table := poetC.TaskTable(taskpoet.TableOpts{
-			Prefix:       "/completed",
-			Columns:      []string{"ID", "Description", "Completed", "Tags"},
-			FilterParams: taskpoet.FilterParams{Limit: limit},
-			Filters: []taskpoet.Filter{
-				taskpoet.FilterHidden,
-			},
-		})
+		table := poetC.TaskTable(*tableOpts)
 		fmt.Print(table)
 	},
 }
 
 func init() {
+	bindTableOpts(getCompleteCmd)
 	rootCmd.AddCommand(getCompleteCmd)
-	getCompleteCmd.PersistentFlags().IntP("limit", "l", 100, "Limit to N results")
 }

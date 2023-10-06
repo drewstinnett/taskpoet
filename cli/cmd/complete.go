@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"log"
+	"github.com/charmbracelet/log"
 
 	"github.com/spf13/cobra"
 )
@@ -16,9 +16,8 @@ var completeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		task, err := poetC.Task.GetWithPartialID(args[0], "", "/active")
 		checkErr(err)
-		err = poetC.Task.Complete(task)
-		checkErr(err)
-		log.Printf("Completed task: '%v', nice work!", task.Description)
+		checkErr(poetC.Task.Complete(task))
+		log.Info("Completed task, nice work!", "task", task.Description)
 	},
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) != 0 {

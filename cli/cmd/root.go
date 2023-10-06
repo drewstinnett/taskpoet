@@ -5,13 +5,14 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
+	"reflect"
+	"regexp"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
-	"github.com/lmittmann/tint"
-	"github.com/prometheus/common/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -113,20 +114,15 @@ func initConfig() {
 	var err error
 
 	// set global logger with custom options
-	level := slog.LevelInfo
+	level := log.InfoLevel
 	if verbose {
-		level = slog.LevelDebug
+		level = log.DebugLevel
 	}
-	slog.SetDefault(slog.New(
-		tint.NewHandler(os.Stderr, &tint.Options{
-			Level:      level,
-			TimeFormat: time.Kitchen,
-		}),
-	))
+	log.SetLevel(level)
 
 	// If a config file is found, read it in.
 	if cerr := viper.ReadInConfig(); cerr == nil {
-		slog.Debug("Using config file", "file", viper.ConfigFileUsed())
+		log.Debug("Using config file", "file", viper.ConfigFileUsed())
 	}
 	poetC, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
 	checkErr(err)
@@ -144,10 +140,97 @@ func initConfig() {
 
 func checkErr(err error) {
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 }
 
 func noComplete(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	return []string{}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// mustGetCmd uses generics to get a given flag with the appropriate Type from a cobra.Command
+func mustGetCmd[T []int | []string | int | uint | string | bool | time.Duration](cmd *cobra.Command, s string) T {
+	switch any(new(T)).(type) {
+	case *int:
+		item, err := cmd.Flags().GetInt(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *uint:
+		item, err := cmd.Flags().GetUint(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *string:
+		item, err := cmd.Flags().GetString(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *bool:
+		item, err := cmd.Flags().GetBool(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *[]int:
+		item, err := cmd.Flags().GetIntSlice(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *[]string:
+		item, err := cmd.Flags().GetStringSlice(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *time.Duration:
+		item, err := cmd.Flags().GetDuration(s)
+		panicIfErr(err)
+		return any(item).(T)
+	default:
+		panic(fmt.Sprintf("unexpected use of mustGetCmd: %v", reflect.TypeOf(s)))
+	}
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func applyCobra(cmd *cobra.Command, args []string, opts *taskpoet.TableOpts) error {
+	var err error
+	if opts.FilterParams.Limit, err = cmd.PersistentFlags().GetInt("limit"); err != nil {
+		return err
+	}
+	var re *regexp.Regexp
+	if len(args) > 0 {
+		opts.FilterParams.Regex = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+		log.Debug("Showing tasks that match", "regex", re)
+	} else {
+		opts.FilterParams.Regex = regexp.MustCompile(".*")
+	}
+	return nil
+}
+
+func mustTableOptsWithCmd(cmd *cobra.Command, args []string) *taskpoet.TableOpts {
+	got, err := tableOptsWithCmd(cmd, args)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+func tableOptsWithCmd(cmd *cobra.Command, args []string) (*taskpoet.TableOpts, error) {
+	opts := &taskpoet.TableOpts{
+		FilterParams: taskpoet.FilterParams{},
+	}
+	var err error
+	if opts.FilterParams.Limit, err = cmd.PersistentFlags().GetInt("limit"); err != nil {
+		return nil, err
+	}
+	var re *regexp.Regexp
+	if len(args) > 0 {
+		opts.FilterParams.Regex = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+		log.Debug("Showing tasks that match", "regex", re)
+	} else {
+		opts.FilterParams.Regex = regexp.MustCompile(".*")
+	}
+	return opts, nil
+}
+
+func bindTableOpts(cmd *cobra.Command) {
+	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
 }

@@ -8,11 +8,12 @@ import (
 
 // listPluginsCmd represents the listPlugins command
 var listPluginsCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List Plugins",
-	Long:  `List Plugins`,
+	Use:    "list",
+	Short:  "List Plugins",
+	Long:   `List Plugins`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		ps, err := localClient.Task.GetPlugins()
+		ps, err := poetC.Task.GetPlugins()
 		checkErr(err)
 		for name, c := range ps {
 			p := c()

@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
 )
@@ -19,31 +19,28 @@ func NewGetCmd() *cobra.Command {
 		Long: `Get Active Tasks
 `,
 		Run: func(cmd *cobra.Command, args []string) {
-			limit, err := cmd.PersistentFlags().GetInt("limit")
-			checkErr(err)
+			tableOpts := mustTableOptsWithCmd(cmd, args)
+			tableOpts.Prefix = "/active"
+			tableOpts.Columns = []string{"ID", "Age", "Description", "Due"}
+			tableOpts.SortBy = taskpoet.ByDue{}
+			tableOpts.Filters = []taskpoet.Filter{
+				taskpoet.FilterHidden,
+				taskpoet.FilterRegex,
+			}
 
 			var re *regexp.Regexp
 			if len(args) > 0 {
-				re = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
-				slog.Debug("Showing tasks that match", "regex", re)
+				tableOpts.FilterParams.Regex = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+				log.Debug("Showing tasks that match", "regex", re)
 			} else {
-				re = regexp.MustCompile(".*")
+				tableOpts.FilterParams.Regex = regexp.MustCompile(".*")
 			}
-			fp := &taskpoet.FilterParams{
-				Regex: re,
-				Limit: limit,
-			}
-			table := localClient.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			// table := poetC.TaskTable("/active", *fp, taskpoet.FilterHidden, taskpoet.FilterRegex)
+			table := poetC.TaskTable(*tableOpts)
 			fmt.Print(table)
-
-			/*
-				if limit < len(tasks) {
-					slog.Warn("more records to display, increase the limit to see it", "n-more", len(tasks)-limit)
-				}
-			*/
 		},
 	}
-	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
+	bindTableOpts(cmd)
 	return cmd
 }
 

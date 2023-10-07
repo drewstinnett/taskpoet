@@ -10,12 +10,13 @@ import (
 
 // uiCmd represents the ui command
 var uiCmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Run the UI",
+	Use:    "ui",
+	Short:  "Run the UI",
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("ui called")
-		p := ui.NewUI(localClient)
-		if err := p.Start(); err != nil {
+		p := ui.NewUI(poetC)
+		if _, err := p.Run(); err != nil {
 			fmt.Printf("Alas, there's been an error: %v", err)
 			os.Exit(1)
 		}

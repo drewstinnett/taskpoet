@@ -13,9 +13,9 @@ var pluginsCmd = &cobra.Command{
 	Aliases: []string{"plugin", "p"},
 	Long:    `Task plugin operations`,
 	Args:    cobra.ExactArgs(1),
+	Hidden:  true,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("plugins called")
-
 	},
 }
 

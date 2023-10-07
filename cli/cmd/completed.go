@@ -5,47 +5,44 @@ import (
 	"sort"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
-	"github.com/dustin/go-humanize"
-	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 )
 
 // getPendingCmd represents the getPending command
 var getCompleteCmd = &cobra.Command{
-	Use:     "completed",
-	Short:   "Get Completed tasks",
-	Aliases: []string{"c", "complete"},
+	Use:               "completed",
+	Short:             "Get Completed tasks",
+	Aliases:           []string{"c", "complete"},
+	ValidArgsFunction: noComplete,
 	Long: `Get Completed Tasks
 `,
 	Run: func(cmd *cobra.Command, args []string) {
+		// limit, err := cmd.PersistentFlags().GetInt("limit")
+		// checkErr(err)
+		// tableOpts := mustTableOptsWithCmd(cmd, args)
+		tableOpts := &taskpoet.TableOpts{
+			Prefix:  "/completed",
+			Columns: []string{"ID", "Description", "Completed", "Tags"},
+			SortBy:  taskpoet.ByCompleted{},
+			Filters: []taskpoet.Filter{
+				taskpoet.FilterRegex,
+				taskpoet.FilterHidden,
+			},
+		}
+		checkErr(applyCobra(cmd, args, tableOpts))
 		var results []taskpoet.Task
-		var err error
-		results, err = localClient.Task.List("/completed")
+		results, err := poetC.Task.List("/completed")
 		checkErr(err)
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Added.Before(results[j].Added)
 		})
 
-		data := make([][]string, 0)
-		data = append(data, []string{"ID", "Description", "Completed", "Tags"})
-		for _, task := range results {
-			row := []string{fmt.Sprintf("%v", task.ID[0:5]), task.Description, humanize.Time(*task.Completed), fmt.Sprintf("%+v", task.Tags)}
-			data = append(data, row)
-		}
-		checkErr(pterm.DefaultTable.WithHasHeader().WithData(data).Render())
+		table := poetC.TaskTable(*tableOpts)
+		fmt.Print(table)
 	},
 }
 
 func init() {
+	bindTableOpts(getCompleteCmd)
 	rootCmd.AddCommand(getCompleteCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// getPendingCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// getPendingCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

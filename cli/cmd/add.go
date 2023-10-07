@@ -1,14 +1,36 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
 )
+
+func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
+	opts := []taskpoet.TaskOption{
+		taskpoet.WithEffortImpact(taskpoet.EffortImpact(mustGetCmd[uint](cmd, "effort-impact"))),
+		taskpoet.WithDescription(strings.Join(args, " ")),
+		taskpoet.WithTags(mustGetCmd[[]string](cmd, "tag")),
+	}
+
+	now := time.Now()
+	dueIn := mustGetCmd[string](cmd, "due")
+	if dueIn != "" {
+		due := now.Add(taskpoet.MustParseDuration(dueIn))
+		opts = append(opts, taskpoet.WithDue(&due))
+	}
+
+	hideIn := mustGetCmd[string](cmd, "wait")
+	if hideIn != "" {
+		hide := now.Add(taskpoet.MustParseDuration(hideIn))
+		opts = append(opts, taskpoet.WithHideUntil(&hide))
+	}
+
+	return taskpoet.MustNewTask(opts...)
+}
 
 // addCmd represents the add command
 var addCmd = &cobra.Command{
@@ -16,87 +38,64 @@ var addCmd = &cobra.Command{
 	Short:   "Add a new task",
 	Args:    cobra.MinimumNArgs(1),
 	Aliases: []string{"a"},
-	Example: `$ taskpoet add "Learn a new skill"
+	Example: `Add a new task by giving the description as an argument:
+$ taskpoet add "Learn a new skill"
+
+For us lazy folks, you can also leave the quotes out:
+$ taskpoet add Learn a new skill
+
+Set an Effort/Impact to a new task:
 $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
-	Long: `Add new task`,
+	Long:              `Add new task`,
+	ValidArgsFunction: noComplete,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Put some basics up here
-		now := time.Now()
-		var err error
+		// t := taskWithCmd(cmd, args)
 
-		// Make sure this is between 0 and 4
-		effortImpact, _ := cmd.PersistentFlags().GetUint("effort-impact")
-		if effortImpact > 4 {
-			log.Fatal("EfforImpact assessment must be less than 5")
-		}
-
-		// Due Date parsing
-		dueS, _ := cmd.PersistentFlags().GetString("due")
-		var due time.Duration
-		if dueS != "" {
-			due, err = taskpoet.ParseDuration(dueS)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		// Get Tags
-		tags, _ := cmd.PersistentFlags().GetStringSlice("tag")
-
-		// HideUntil parsing
-		waitS, _ := cmd.PersistentFlags().GetString("wait")
-		var wait time.Duration
-		if waitS != "" {
-			wait, err = taskpoet.ParseDuration(waitS)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		parentS, _ := cmd.PersistentFlags().GetString("parent")
-
-		t := &taskpoet.Task{
-			Description:  strings.Join(args, " "),
-			EffortImpact: effortImpact,
-			Tags:         tags,
-		}
-
-		// Did we specify a due date?
-		if float64(due.Nanoseconds()) != float64(0) {
-			d := now.Add(due)
-			t.Due = &d
-		}
-		if wait.Nanoseconds() != 0 {
-			h := now.Add(wait)
-			t.HideUntil = &h
-		}
-
-		found, err := localClient.Task.Add(t, taskDefaults)
+		added, err := poetC.Task.Add(taskWithCmd(cmd, args))
 		checkErr(err)
+
+		parentS := mustGetCmd[string](cmd, "parent")
 		if parentS != "" {
-			parent, err := localClient.Task.GetWithPartialID(parentS, "", "")
+			parent, err := poetC.Task.GetWithPartialID(parentS, "", "")
 			checkErr(err)
 			if parent != nil {
-				checkErr(localClient.Task.AddParent(t, parent))
+				checkErr(poetC.Task.AddParent(added, parent))
 			}
 		}
-		fmt.Printf("Added task '%v'\n", found.Description)
+		log.Info("Added task", "description", added.Description)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(addCmd)
+	err := bindAdd(addCmd)
+	if err != nil {
+		panic(err)
+	}
+}
 
-	// Here you will define your flags and configuration settings.
+func bindAdd(cmd *cobra.Command) error {
+	cmd.PersistentFlags().UintP("effort-impact", "e", 0, "Effort/Impact Score Assessment. See Help for more info")
+	err := cmd.RegisterFlagCompletionFunc("effort-impact", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			"0\tUndefined (Default)",
+			"1\tLow Effort, High Impact (Sweet Spot)",
+			"2\t High Effort, High Impact (Homework)",
+			"3\tLow Effort, Low Impact (Busywork)",
+			"4\tHigh Effort, Low Impact (Charity)",
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
+	checkErr(err)
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// addCmd.PersistentFlags().String("foo", "", "A help for foo")
-	addCmd.PersistentFlags().UintP("effort-impact", "e", 0, "Effort/Impact Score Assessment. See Help for more info")
-	addCmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
-	addCmd.PersistentFlags().StringP("due", "d", "", "How long before this is due?")
-	addCmd.PersistentFlags().StringP("wait", "w", "", "Wait until given duration to actually show up as active")
-	addCmd.PersistentFlags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
+	cmd.PersistentFlags().StringP("parent", "p", "", "ID of parent task")
+	if err := cmd.RegisterFlagCompletionFunc("parent", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
+		return err
+	}
 
-	// addCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	cmd.PersistentFlags().StringP("due", "d", "", "How long before this is due?")
+	cmd.PersistentFlags().StringP("wait", "w", "", "Wait until given duration to actually show up as active")
+	cmd.PersistentFlags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
+	return nil
 }

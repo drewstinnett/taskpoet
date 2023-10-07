@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"log"
 	"math/rand"
 	"reflect"
 	"time"
+
+	"github.com/charmbracelet/log"
 
 	"github.com/bxcodec/faker"
 	"github.com/drewstinnett/taskpoet/taskpoet"
@@ -19,7 +20,7 @@ var fakeitCmd = &cobra.Command{
 	Long:   `Generate a bunch of fake tasks. Mainly used for testing, load, boring stuff like that`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var ts []taskpoet.Task
-		log.Println("Generating TODO tasks")
+		log.Info("Generating TODO tasks")
 		for i := 0; i < 100; i++ {
 			desc, err := faker.GetLorem().Sentence(reflect.Value{})
 			checkErr(err)
@@ -32,25 +33,22 @@ var fakeitCmd = &cobra.Command{
 			}
 			ts = append(ts, t)
 		}
-		err := localClient.Task.AddSet(ts, nil)
-		checkErr(err)
+		checkErr(poetC.Task.AddSet(ts))
 
-		log.Println("Generating completed tasks")
+		log.Info("Generating completed tasks")
 		var tsl []taskpoet.Task
 		for i := 0; i < 100; i++ {
 			desc, serr := faker.GetLorem().Sentence(reflect.Value{})
 			checkErr(serr)
 
-			t := taskpoet.Task{
+			tsl = append(tsl, taskpoet.Task{
 				// Description: fmt.Sprintf("Task number %v", i),
 				Description: desc.(string),
 				Added:       randomAddedDate(),
 				Completed:   randomCompletedDate(),
-			}
-			tsl = append(tsl, t)
+			})
 		}
-		err = localClient.Task.AddSet(tsl, nil)
-		checkErr(err)
+		checkErr(poetC.Task.AddSet(tsl))
 	},
 }
 

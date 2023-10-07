@@ -1,0 +1,8 @@
+site_name: TaskPoet
+docs_dir: docs
+site_dir: public
+repo_url: https://github.com/drewstinnett/taskpoet
+theme:
+  name: material
+  icon:
+    logo: material/feather

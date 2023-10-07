@@ -531,8 +531,7 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
 	var tasks Tasks
 	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(svc.localClient.bucket)
-		if err := b.ForEach(func(k, v []byte) error {
+		if err := svc.localClient.getBucket(tx).ForEach(func(k, v []byte) error {
 			var task Task
 			if err := json.Unmarshal(v, &task); err != nil {
 				return err
@@ -555,8 +554,7 @@ func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
 // Log is a Shortcut utility to add a new task, but a completed time of 'now'
 func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 	if t.Completed == nil {
-		n := time.Now()
-		t.Completed = &n
+		t.Completed = nowPTR()
 	}
 	return svc.Add(t)
 }

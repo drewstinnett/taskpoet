@@ -133,11 +133,9 @@ type Poet struct {
 func (p *Poet) initDB() error {
 	// store some data
 	return p.DB.Update(func(tx *bolt.Tx) error {
-		// localClient.
 		bucket := p.getBucket(tx)
 		if bucket == nil {
-			_, berr := tx.CreateBucket(p.bucket)
-			if berr != nil {
+			if _, berr := tx.CreateBucket(p.bucket); berr != nil {
 				return berr
 			}
 		}
@@ -260,9 +258,7 @@ func iterateColumnHeaders(c []string, d []Task) []string {
 	ret := make([]string, len(c))
 	for idx, item := range c {
 		cl, err := getTaskColumn(item, d)
-		if err != nil {
-			panic(err)
-		}
+		panicIfErr(err)
 		ret[idx] = header.Width(cl.Width()).Render(item)
 	}
 	return ret
@@ -273,9 +269,7 @@ func iterateColumnValues(c []string, t Task, d []Task, s lipgloss.Style) []strin
 	for idx, item := range c {
 		// ret[idx] = s.Width(mustColumnSize(item)).Render(mustColumnValue(item, t))
 		cl, err := getTaskColumn(item, d)
-		if err != nil {
-			panic(err)
-		}
+		panicIfErr(err)
 		ret[idx] = s.Width(cl.Width()).Render(mustColumnValue(item, t))
 	}
 	return ret

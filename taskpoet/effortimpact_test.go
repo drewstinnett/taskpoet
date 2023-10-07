@@ -1,9 +1,9 @@
-package taskpoet_test
+package taskpoet
 
 import (
 	"testing"
 
-	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPriorityStrings(t *testing.T) {
@@ -12,20 +12,18 @@ func TestPriorityStrings(t *testing.T) {
 		id          int
 		description string
 	}{
-		{
-			id:          0,
-			description: "Unset",
-		},
-		{
-			id:          4,
-			description: "High Effort, Low Impact",
-		},
+		{id: 0, description: "Unset"},
+		{id: 4, description: "High Effort, Low Impact"},
 	}
 
 	for _, test := range tests {
-		gotDescription := taskpoet.EffortImpactText(test.id)
+		gotDescription := EffortImpactText(test.id)
 		if gotDescription != test.description {
 			t.Errorf("Expected %v but got %v", test.description, gotDescription)
 		}
 	}
+}
+
+func TestEIEmoji(t *testing.T) {
+	require.Equal(t, "💀", EffortImpactAvoid.Emoji())
 }

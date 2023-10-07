@@ -112,18 +112,13 @@ func (t *Task) ShortID() string {
 	return t.ID[0:min(len(t.ID), 5)]
 }
 
-// TaskValidateOpts is a dumb struct...why is this here?
-type TaskValidateOpts struct {
-	IsExisting bool
-}
-
 // TaskService is the interface to tasks...we'll delete this junk
 type TaskService interface {
 	// This should replace New, and Log
 	Add(t *Task) (*Task, error)
 	AddSet(t []Task) error
 
-	BucketName() string
+	// BucketName() string
 
 	// Helper for adding Parent
 	AddParent(c, p *Task) error
@@ -181,21 +176,17 @@ type TaskService interface {
 	GetIDsByPrefix(prefix string) ([]string, error)
 }
 
-// BucketName returns the name of the task bucket
-func (svc *TaskServiceOp) BucketName() string {
-	return fmt.Sprintf("/%v/tasks", svc.localClient.Namespace)
-}
-
 // GetStates returns types of states
 func (svc *TaskServiceOp) GetStates() []string {
-	return []string{"active", "completed"}
+	return []string{"active", "completed", "deleted"}
 }
 
 // GetStatePaths is each of the states with a / prefix i guess
 func (svc *TaskServiceOp) GetStatePaths() []string {
-	var r []string
-	for _, item := range svc.GetStates() {
-		r = append(r, filepath.Join("/", item))
+	s := svc.GetStates()
+	r := make([]string, len(s))
+	for idx, item := range s {
+		r[idx] = filepath.Join("/", item)
 	}
 	return r
 }
@@ -316,10 +307,8 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error { //nolint:funlen,gocognit
 			if err != nil {
 				return err
 			}
-			b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-			err = b.Put(t.DetectKeyPath(), taskSerial)
-			if err != nil {
-				return err
+			if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); perr != nil {
+				return perr
 			}
 		}
 		return nil
@@ -339,8 +328,7 @@ func (svc *TaskServiceOp) Purge(t *Task) error {
 	}
 
 	if svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		if derr := b.Delete(originalTask.DetectKeyPath()); derr != nil {
+		if derr := svc.localClient.getBucket(tx).Delete(originalTask.DetectKeyPath()); derr != nil {
 			return err
 		}
 		return nil
@@ -367,26 +355,17 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, errors.New("editing the Completed field is not yet supported as it changes the path")
 	}
 
-	/*
-		if verr := svc.Validate(t, &TaskValidateOpts{IsExisting: true}); verr != nil {
-			return nil, verr
-		}
-	*/
-
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
 	}
 
-	uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = b.Put(t.DetectKeyPath(), taskSerial)
-		if err != nil {
+	if uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		if err := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); err != nil {
 			return err
 		}
 		return nil
-	})
-	if uerr != nil {
+	}); uerr != nil {
 		return nil, uerr
 	}
 
@@ -451,7 +430,6 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 // TaskServiceOp is the TaskService Operator
 type TaskServiceOp struct {
 	localClient *Poet
-	// plugins     []TaskPlugin
 }
 
 // DefaultPluginID is just the string used as the built in plugin default
@@ -487,30 +465,19 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 		return nil, fmt.Errorf(
 			"more than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
 	}
-	t, err := svc.GetWithExactPath([]byte(matches[0]))
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
+	return svc.GetWithExactPath([]byte(matches[0]))
 }
 
 // GetWithExactPath returns a task from an exact path
 func (svc *TaskServiceOp) GetWithExactPath(path []byte) (*Task, error) {
 	var task Task
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		taskBytes := b.Get(path)
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		taskBytes := svc.localClient.getBucket(tx).Get(path)
 		if taskBytes == nil {
 			return fmt.Errorf("could not find task: %s", path)
 		}
-		err := json.Unmarshal(taskBytes, &task)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
+		return json.Unmarshal(taskBytes, &task)
+	}); err != nil {
 		return nil, err
 	}
 	return &task, nil
@@ -549,7 +516,7 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 		if err != nil {
 			return err
 		}
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+		b := svc.localClient.getBucket(tx)
 		if perr := b.Put(completePath, taskSerial); perr != nil {
 			return perr
 		}
@@ -563,25 +530,22 @@ func (svc *TaskServiceOp) Complete(t *Task) error {
 // List lists items under a given prefix
 func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
 	var tasks Tasks
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err := b.ForEach(func(k, v []byte) error {
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(svc.localClient.bucket)
+		if err := b.ForEach(func(k, v []byte) error {
 			var task Task
-			err := json.Unmarshal(v, &task)
-			if err != nil {
+			if err := json.Unmarshal(v, &task); err != nil {
 				return err
 			}
 			if strings.HasPrefix(string(k), prefix) {
 				tasks = append(tasks, task)
 			}
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -594,19 +558,14 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 		n := time.Now()
 		t.Completed = &n
 	}
-	ret, err := svc.Add(t)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
+	return svc.Add(t)
 }
 
 // AddSet adds a task set
 func (svc *TaskServiceOp) AddSet(t []Task) error {
 	for _, task := range t {
 		task := task
-		_, err := svc.Add(&task)
-		if err != nil {
+		if _, err := svc.Add(&task); err != nil {
 			return err
 		}
 	}
@@ -618,14 +577,6 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	// t is the new task
 	t.setDefaults(&svc.localClient.Default)
 
-	// Validate that Task is actually good
-	/*
-		err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})
-		if err != nil {
-			return nil, err
-		}
-	*/
-
 	// Does this already exist??
 	if svc.localClient.exists(t) {
 		return nil, errExists
@@ -636,15 +587,13 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 		return nil, err
 	}
 
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		if perr := bucket.Put(t.DetectKeyPath(), taskSerial); perr != nil {
+	if uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); perr != nil {
 			return perr
 		}
 		return nil
-	})
-	if err != nil {
-		return nil, err
+	}); uerr != nil {
+		return nil, uerr
 	}
 
 	return t, nil
@@ -654,9 +603,8 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	allIDs := []string{}
 
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		if err := bucket.ForEach(func(k, v []byte) error {
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		if err := svc.localClient.getBucket(tx).ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				allIDs = append(allIDs, string(k))
 			}
@@ -665,8 +613,7 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -679,8 +626,7 @@ func (p Poet) CompleteIDsWithPrefix(prefix, toComplete string) []string {
 	allIDs := []string{}
 
 	err := p.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(p.Task.BucketName()))
-		err := bucket.ForEach(func(k, v []byte) error {
+		err := p.getBucket(tx).ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				idPieces := strings.Split(string(k), "/")
 				id := idPieces[len(idPieces)-1]
@@ -737,7 +683,7 @@ func WithID(i string) TaskOption {
 // WithChildren set the children of a task
 func WithChildren(c []string) TaskOption {
 	return func(t *Task) {
-		t.Parents = c
+		t.Children = c
 	}
 }
 

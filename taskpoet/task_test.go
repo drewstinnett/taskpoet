@@ -250,6 +250,16 @@ func TestTaskSelfAddParent(t *testing.T) {
 	require.EqualError(t, err, "self id is set in the parents, we don't do that")
 }
 
+func TestTaskSelfAddChild(t *testing.T) {
+	_, err := NewTask(
+		WithID("test-self-add-child"),
+		WithDescription("foo"),
+		WithChildren([]string{"test-self-add-child"}),
+	)
+	require.Error(t, err)
+	require.EqualError(t, err, "self id is set in the children, we don't do that")
+}
+
 func TestTaskDuplicateParents(t *testing.T) {
 	_, err := NewTask(
 		WithID("some-id"),
@@ -510,8 +520,7 @@ func TestHideAfterDue(t *testing.T) {
 }
 
 func TestDefaultBucketName(t *testing.T) {
-	n := lc.Task.BucketName()
-	assert.Equal(t, n, "/default/tasks")
+	assert.Equal(t, string(lc.bucket), "/default/tasks")
 }
 
 func TestPurgeTask(t *testing.T) {

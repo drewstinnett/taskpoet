@@ -19,15 +19,17 @@ func TestInitDB(t *testing.T) {
 	lc, err := New(WithDatabasePath(tmpfile.Name()))
 	require.NoError(t, err)
 	err = lc.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(lc.Task.BucketName()))
-		require.NotNil(t, bucket)
+		require.NotNil(t, lc.getBucket(tx))
 		return nil
 	})
 	require.NoError(t, err)
 }
 
 func TestNew(t *testing.T) {
-	got, err := New(WithNamespace("foo"))
+	got, err := New(
+		WithNamespace("foo"),
+		WithDatabasePath(mustTempDB(t)),
+	)
 	require.NotNil(t, got)
 	require.NoError(t, err)
 	require.Equal(t, "foo", got.Namespace)

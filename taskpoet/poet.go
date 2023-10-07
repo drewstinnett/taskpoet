@@ -61,6 +61,9 @@ func New(options ...Option) (*Poet, error) {
 		opt(p)
 	}
 
+	// We may want to make this more flexible later
+	p.bucket = []byte(fmt.Sprintf("/%v/tasks", p.Namespace))
+
 	var err error
 	p.DB, err = bolt.Open(p.dbPath, 0o600, nil)
 	if err != nil {
@@ -123,6 +126,7 @@ type Poet struct {
 	Task           TaskService
 	dbPath         string
 	RecurringTasks RecurringTasks
+	bucket         []byte
 }
 
 // initDB initializes the database
@@ -130,9 +134,9 @@ func (p *Poet) initDB() error {
 	// store some data
 	return p.DB.Update(func(tx *bolt.Tx) error {
 		// localClient.
-		bucket := tx.Bucket([]byte(p.Task.BucketName()))
+		bucket := p.getBucket(tx)
 		if bucket == nil {
-			_, berr := tx.CreateBucket([]byte(p.Task.BucketName()))
+			_, berr := tx.CreateBucket(p.bucket)
 			if berr != nil {
 				return berr
 			}
@@ -500,7 +504,7 @@ func (p *Poet) Delete(t *Task) error {
 		if err != nil {
 			return err
 		}
-		b := tx.Bucket([]byte(p.Task.BucketName()))
+		b := tx.Bucket(p.bucket)
 		if perr := b.Put(newPath, taskSerial); perr != nil {
 			return perr
 		}
@@ -509,4 +513,8 @@ func (p *Poet) Delete(t *Task) error {
 		return err
 	}
 	return nil
+}
+
+func (p Poet) getBucket(tx *bolt.Tx) *bolt.Bucket {
+	return tx.Bucket(p.bucket)
 }

@@ -2,7 +2,13 @@ site_name: TaskPoet
 docs_dir: docs
 site_dir: public
 repo_url: https://github.com/drewstinnett/taskpoet
+edit_uri: https://github.com/drewstinnett/taskpoet/edit/main/docs
 theme:
   name: material
   icon:
     logo: material/feather
+  features:
+    - content.action.edit
+    - content.code.select
+    - content.code.copy
+    - content.tabs.link

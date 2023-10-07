@@ -29,7 +29,7 @@ func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
 		opts = append(opts, taskpoet.WithHideUntil(&hide))
 	}
 
-	return taskpoet.NewTask(opts...)
+	return taskpoet.MustNewTask(opts...)
 }
 
 // addCmd represents the add command

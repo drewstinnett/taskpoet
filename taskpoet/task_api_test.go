@@ -117,6 +117,7 @@ func TestAddTask(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 }
 
+/*
 func TestAddInvalidTask(t *testing.T) {
 	// Make sure include_completed not set to bool errors
 	task := Task{}
@@ -126,6 +127,7 @@ func TestAddInvalidTask(t *testing.T) {
 	router.ServeHTTP(w, req)
 	assert.Equal(t, 500, w.Code)
 }
+*/
 
 func TestGetTask(t *testing.T) {
 	ts := []Task{

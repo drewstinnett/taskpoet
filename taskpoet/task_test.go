@@ -99,7 +99,7 @@ func TestCompleteTask(t *testing.T) {
 }
 
 func TestBlankDescription(t *testing.T) {
-	_, err := lc.Task.Add(&Task{})
+	_, err := NewTask()
 	require.Error(t, err)
 	require.EqualError(t, err, "missing description for Task")
 }
@@ -307,11 +307,14 @@ func TestEditNonExisting(t *testing.T) {
 }
 
 func TestEditInvalid(t *testing.T) {
-	task := &Task{ID: "soon-to-be-invalid", Description: "foo"}
-	_, err := lc.Task.Add(task)
-	if err != nil {
-		t.Error(err)
-	}
+	task, err := NewTask(
+		WithID("soon-to-be-valid"),
+		WithDescription("foo"),
+	)
+	require.NoError(t, err)
+	// task := &Task{ID: "soon-to-be-invalid", Description: "foo"}
+	_, aerr := lc.Task.Add(task)
+	require.NoError(t, aerr)
 
 	task.Description = ""
 	_, err = lc.Task.Edit(task)
@@ -633,7 +636,7 @@ func TestCompleteIDs(t *testing.T) {
 
 func TestTaskTable(t *testing.T) {
 	p := newTestPoet(t)
-	_, err := p.Task.Add(NewTask(WithDescription("draw a table and test it")))
+	_, err := p.Task.Add(MustNewTask(WithDescription("draw a table and test it")))
 	require.NoError(t, err)
 
 	table := p.TaskTable(TableOpts{

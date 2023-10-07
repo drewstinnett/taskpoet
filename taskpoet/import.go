@@ -78,18 +78,24 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (in
 			pushStatus(c, s)
 			continue
 		}
-		t := NewTask(WithTaskWarriorTask(twItem))
-		if (t.HideUntil != nil) && (t.Due != nil) && t.HideUntil.After(*t.Due) {
-			s.Warning = fmt.Sprintf("importing task, Due was after HideUntil, so we tweaked that: %v", twItem.Description)
-			nh := t.Due.Add(-1 * time.Minute)
-			t.HideUntil = &nh
+		t := MustNewTask(WithTaskWarriorTask(twItem))
+
+		_, err := p.Task.Add(t)
+		if p.Task.Validate(t, &TaskValidateOpts{IsExisting: true}) != nil {
+			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
+		} else if (err == nil) || (err != nil) && (err == errExists) {
+			imported++
+		} else if err != nil {
+			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
 		}
 
-		if _, err := p.Task.Add(t); err != nil && err != errExists {
-			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
-		} else {
-			imported++
-		}
+		/*
+			if _, err := p.Task.Add(t); err != nil && err != errExists {
+				s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
+			} else {
+				imported++
+			}
+		*/
 		pushStatus(c, s)
 	}
 	return imported, nil

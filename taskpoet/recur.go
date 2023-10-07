@@ -29,7 +29,7 @@ func (p *Poet) checkRecurring() error {
 		}
 
 		if needsCreate {
-			if _, err := p.Task.Add(NewTask(WithDescription(recur.Description))); err != nil {
+			if _, err := p.Task.Add(MustNewTask(WithDescription(recur.Description))); err != nil {
 				return err
 			}
 		}

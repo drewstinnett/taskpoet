@@ -282,15 +282,6 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error { //nolint:funlen,gocognit
 			return errors.New("editing the Completed field is not yet supported as it changes the path")
 		}
 
-		err = svc.Validate(&t, &TaskValidateOpts{IsExisting: true})
-		if err != nil {
-			return err
-		}
-
-		// Now do the merge
-		if err != nil {
-			return err
-		}
 		// var mergedTask Task
 		// Decide how to handle missing data and such
 		// Added should never change
@@ -367,6 +358,10 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, errors.New("cannot edit a task that did not previously exist: " + t.ID)
 	}
 
+	if t.Description == "" {
+		return nil, errors.New("must set description")
+	}
+
 	// Right now we wanna use the Complete function to do this, not edit...at least yet
 	if originalTask.Completed != t.Completed {
 		return nil, errors.New("editing the Completed field is not yet supported as it changes the path")
@@ -398,9 +393,11 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 
 // Validate validates a task i guess...
 func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
-	if t.Description == "" {
-		return errors.New("missing description for Task")
-	}
+	/*
+		if t.Description == "" {
+			return errors.New("missing description for Task")
+		}
+	*/
 
 	if strings.Contains(t.ID, "/") {
 		return errors.New("ID Cannot contain a slash (/)")
@@ -767,6 +764,13 @@ func WithDescription(d string) TaskOption {
 	}
 }
 
+// WithID sets the UUID on create
+func WithID(i string) TaskOption {
+	return func(t *Task) {
+		t.ID = i
+	}
+}
+
 // WithTags sets the tags on create
 func WithTags(s []string) TaskOption {
 	return func(t *Task) {
@@ -803,7 +807,6 @@ func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
 		t.Tags = twItem.Tags
 		t.Due = (*time.Time)(twItem.Due)
 		t.Completed = (*time.Time)(twItem.End)
-		t.HideUntil = (*time.Time)(twItem.Wait)
 		t.Reviewed = (*time.Time)(twItem.Reviewed)
 		t.CancelAfter = (*time.Time)(twItem.Until)
 		if twItem.Status == "deleted" {
@@ -821,15 +824,34 @@ func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
 				t.Comments[idx].Added = time.Time(*a.Entry)
 			}
 		}
+
+		if (twItem.Wait != nil) && (twItem.Due != nil) && (*time.Time)(twItem.Wait).After((time.Time)(*twItem.Due)) {
+			nh := t.Due.Add(-1 * time.Minute)
+			t.HideUntil = &nh
+		} else {
+			t.HideUntil = (*time.Time)(twItem.Wait)
+		}
 	}
 }
 
+// MustNewTask returns a task or panics
+func MustNewTask(options ...TaskOption) *Task {
+	got, err := NewTask(options...)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
 // NewTask returns a new task given functional options
-func NewTask(options ...TaskOption) *Task {
+func NewTask(options ...TaskOption) (*Task, error) {
 	task := &Task{}
 	for _, opt := range options {
 		opt(task)
 	}
+	if task.Description == "" {
+		return nil, errors.New("missing description for Task")
+	}
 
-	return task
+	return task, nil
 }

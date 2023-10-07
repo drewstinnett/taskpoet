@@ -17,8 +17,7 @@ func TestTWMarshal(t *testing.T) {
 }
 
 func TestTWImport(t *testing.T) {
-	p, err := New(WithDatabasePath(mustTempDB(t)))
-	require.NoError(t, err)
+	p := newTestPoet(t)
 	futureT := TWTime(time.Now().Add(24 * time.Hour))
 	pastT := TWTime(time.Now().Add(-24 * time.Hour))
 	ts := TaskWarriorTasks{
@@ -28,12 +27,48 @@ func TestTWImport(t *testing.T) {
 		{Description: "bar is done", End: &pastT},
 		{Description: "baz is waiting", Wait: &futureT},
 		{Description: "quux has a tag or two", Tags: []string{"canary", "yearly-review"}},
-		{
-			Description: "something comment worthy",
-			Annotations: []TWAnnotation{{Entry: &pastT, Description: "This is an annotation"}},
-		},
+		{Description: "something comment worthy", Annotations: []TWAnnotation{{Entry: &pastT, Description: "This is an annotation"}}},
 	}
 	got, err := p.ImportTaskWarrior(ts, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(ts), got)
 }
+
+func TestTWImportHasMask(t *testing.T) {
+	p := newTestPoet(t)
+	ts := []TaskWarriorTask{
+		{
+			Description: "masked task",
+			Mask:        "x",
+		},
+	}
+	got, _ := p.ImportTaskWarrior(ts, nil)
+	require.Equal(t, 0, got)
+}
+
+func TestTWImportHiddenWeirdness(t *testing.T) {
+	p := newTestPoet(t)
+	futureT := TWTime(time.Now().Add(24 * time.Hour))
+	pastT := TWTime(time.Now().Add(-24 * time.Hour))
+	ts := []TaskWarriorTask{
+		{
+			Description: "weird hid",
+			Wait:        &futureT,
+			Due:         &pastT,
+		},
+	}
+	got, _ := p.ImportTaskWarrior(ts, nil)
+	require.Equal(t, 1, got)
+}
+
+/*
+func TestTWImportDuplicate(t *testing.T) {
+	NewTask(WithDescription("hello"))
+	got, err := newTestPoet(t).ImportTaskWarrior([]TaskWarriorTask{
+		{UUID: "duplicate", Description: "Some dup"},
+		{UUID: "duplicate", Description: "Some other dup"},
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, got)
+}
+*/

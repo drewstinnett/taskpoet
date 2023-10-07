@@ -244,8 +244,8 @@ func filterUniqueStrings(target []string) []string {
 	return uniqueNames
 }
 
-// ContainsString checks if a string is contained in an array
-func ContainsString(s []string, str string) bool {
+// containsString checks if a string is contained in an array
+func containsString(s []string, str string) bool {
 	for _, v := range s {
 		if v == str {
 			return true

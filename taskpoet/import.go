@@ -80,22 +80,14 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (in
 		}
 		t := MustNewTask(WithTaskWarriorTask(twItem))
 
-		_, err := p.Task.Add(t)
-		if p.Task.Validate(t, &TaskValidateOpts{IsExisting: true}) != nil {
-			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
-		} else if (err == nil) || (err != nil) && (err == errExists) {
-			imported++
-		} else if err != nil {
-			s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
-		}
-
-		/*
-			if _, err := p.Task.Add(t); err != nil && err != errExists {
+		if !p.exists(t) {
+			if _, err := p.Task.Add(t); err != nil {
 				s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
 			} else {
 				imported++
 			}
-		*/
+		}
+
 		pushStatus(c, s)
 	}
 	return imported, nil

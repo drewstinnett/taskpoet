@@ -146,7 +146,7 @@ type TaskService interface {
 	Complete(t *Task) error
 
 	// Check to ensure Task is in a valid state
-	Validate(t *Task, o *TaskValidateOpts) error
+	// Validate(t *Task, o *TaskValidateOpts) error
 
 	// Sweet lord, this gettin' confusin' Drew
 	GetPlugins() (map[string]Creator, error)
@@ -358,8 +358,8 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, errors.New("cannot edit a task that did not previously exist: " + t.ID)
 	}
 
-	if t.Description == "" {
-		return nil, errors.New("must set description")
+	if verr := t.Validate(); verr != nil {
+		return nil, verr
 	}
 
 	// Right now we wanna use the Complete function to do this, not edit...at least yet
@@ -367,9 +367,11 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, errors.New("editing the Completed field is not yet supported as it changes the path")
 	}
 
-	if verr := svc.Validate(t, &TaskValidateOpts{IsExisting: true}); verr != nil {
-		return nil, verr
-	}
+	/*
+		if verr := svc.Validate(t, &TaskValidateOpts{IsExisting: true}); verr != nil {
+			return nil, verr
+		}
+	*/
 
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
@@ -389,53 +391,6 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 	}
 
 	return t, nil
-}
-
-// Validate validates a task i guess...
-func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
-	/*
-		if t.Description == "" {
-			return errors.New("missing description for Task")
-		}
-	*/
-
-	if strings.Contains(t.ID, "/") {
-		return errors.New("ID Cannot contain a slash (/)")
-	}
-
-	// If not specified
-	if o == nil {
-		o = &TaskValidateOpts{}
-	}
-
-	// IF NEW, Make sure this ID doesn't already exist
-	if !o.IsExisting {
-		_, err := svc.GetWithID(t.ID, t.PluginID, "")
-		if err == nil {
-			return errExists
-		}
-	}
-
-	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
-	if t.HideUntil != nil && t.Due != nil {
-		if t.HideUntil.After(*t.Due) {
-			return fmt.Errorf("HideUntil cannot be later than Due")
-		}
-	}
-
-	// Make sure we didn't add ourself
-	if ContainsString(t.Parents, t.ID) {
-		return fmt.Errorf("self id is set in the parents, we don't do that")
-	}
-	if ContainsString(t.Children, t.ID) {
-		return fmt.Errorf("self id is set in the children, we don't do that")
-	}
-
-	// Make sure Parents contains no duplicates
-	if !CheckUniqueStringSlice(t.Parents) {
-		return fmt.Errorf("found duplicate ids in the Parents field")
-	}
-	return nil
 }
 
 // Describe describes a task
@@ -664,10 +619,18 @@ func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	t.setDefaults(&svc.localClient.Default)
 
 	// Validate that Task is actually good
-	err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})
-	if err != nil {
-		return nil, err
+	/*
+		err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})
+		if err != nil {
+			return nil, err
+		}
+	*/
+
+	// Does this already exist??
+	if svc.localClient.exists(t) {
+		return nil, errExists
 	}
+
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
@@ -771,6 +734,20 @@ func WithID(i string) TaskOption {
 	}
 }
 
+// WithChildren set the children of a task
+func WithChildren(c []string) TaskOption {
+	return func(t *Task) {
+		t.Parents = c
+	}
+}
+
+// WithParents set the parents of a task
+func WithParents(p []string) TaskOption {
+	return func(t *Task) {
+		t.Parents = p
+	}
+}
+
 // WithTags sets the tags on create
 func WithTags(s []string) TaskOption {
 	return func(t *Task) {
@@ -843,15 +820,41 @@ func MustNewTask(options ...TaskOption) *Task {
 	return got
 }
 
+// Validate makes sure the task isn't malformed
+func (t Task) Validate() error {
+	if t.Description == "" {
+		return errors.New("missing description for Task")
+	}
+	if strings.Contains(t.ID, "/") {
+		return errors.New("ID Cannot contain a slash (/)")
+	}
+	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
+	if t.HideUntil != nil && t.Due != nil {
+		if t.HideUntil.After(*t.Due) {
+			return fmt.Errorf("HideUntil cannot be later than Due")
+		}
+	}
+
+	// Make sure we didn't add ourself
+	if containsString(t.Parents, t.ID) {
+		return fmt.Errorf("self id is set in the parents, we don't do that")
+	}
+	if containsString(t.Children, t.ID) {
+		return fmt.Errorf("self id is set in the children, we don't do that")
+	}
+	// kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"})
+	// Make sure Parents contains no duplicates
+	if !CheckUniqueStringSlice(t.Parents) {
+		return fmt.Errorf("found duplicate ids in the Parents field")
+	}
+	return nil
+}
+
 // NewTask returns a new task given functional options
 func NewTask(options ...TaskOption) (*Task, error) {
 	task := &Task{}
 	for _, opt := range options {
 		opt(task)
 	}
-	if task.Description == "" {
-		return nil, errors.New("missing description for Task")
-	}
-
-	return task, nil
+	return task, task.Validate()
 }

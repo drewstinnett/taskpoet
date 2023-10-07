@@ -57,22 +57,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestValidate(t *testing.T) {
-	tests := []struct {
-		task  Task
-		valid bool
-	}{
-		{
-			task:  Task{ID: "foo/bar", Description: "Invalid-id"},
-			valid: false,
-		},
-	}
-
-	for _, test := range tests {
-		err := lc.Task.Validate(&test.task, nil)
-		valid := err == nil
-		require.Equal(t, valid, test.valid)
-	}
+func TestIDSlash(t *testing.T) {
+	/*
+		//task:  Task{ID: "foo/bar", Description: "Invalid-id"},
+		task:  Task{ID: "foo/bar", Description: "Invalid-id"},
+		valid: false,
+	*/
+	_, err := NewTask(WithDescription("foo"), WithID("foo/bar"))
+	require.EqualError(t, err, "ID Cannot contain a slash (/)")
 }
 
 func TestLogTask(t *testing.T) {
@@ -174,27 +166,20 @@ func TestGetByExactPath(t *testing.T) {
 func TestDuplicateIDs(t *testing.T) {
 	// Put something new in the completed bucket
 	_, err := lc.Task.Log(&Task{ID: "duplicate-id", Description: "foo"}, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	// Try to create a new task with the same id
 	_, err = lc.Task.Add(&Task{ID: "duplicate-id", Description: "foo"})
-	if err == nil {
-		t.Error("Creating a duplicate ID did not present an error")
-	}
+	require.Error(t, err)
+	require.Equal(t, errExists, err)
 
 	// Make sure IDs and PluginIDs are UniqueTogether
 	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-1", Description: "foo"})
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	// Try to create a new task with the same id
 	_, err = lc.Task.Add(&Task{ID: "duplicate-id-plugin", PluginID: "plugin-2", Description: "foo"})
-	if err != nil {
-		t.Error("Creating a duplicate ID with Plugin presented an error")
-	}
+	require.NoError(t, err)
 }
 
 func TestGetByExactID(t *testing.T) {
@@ -247,38 +232,32 @@ func TestAddParent(t *testing.T) {
 	// Make sure adding a parent works
 	kid.Parents = append(kid.Parents, parent.ID)
 	_, err = lc.Task.Edit(kid)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	// Make sure you can't add the same parent multiple times
 	kid.Parents = append(kid.Parents, parent.ID)
 	_, err = lc.Task.Edit(kid)
-	if err == nil {
-		t.Error("Adding the same parent twice did not generate an error")
-	}
+	require.Error(t, err)
 }
 
 func TestTaskSelfAddParent(t *testing.T) {
-	// Definitely don't add yourself to the parents array
-	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-parent", Description: "foo"})
-
-	kid.Parents = append(kid.Parents, kid.ID)
-	_, err := lc.Task.Edit(kid)
-	if err == nil {
-		t.Error("Adding the a task as it's own parent did not return an error")
-	}
+	_, err := NewTask(
+		WithID("test-self-add-parent"),
+		WithDescription("foo"),
+		WithParents([]string{"test-self-add-parent"}),
+	)
+	require.Error(t, err)
+	require.EqualError(t, err, "self id is set in the parents, we don't do that")
 }
 
-func TestTaskSelfAddChildren(t *testing.T) {
-	// Definitely don't add yourself to the children array
-	kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"})
-
-	kid.Children = append(kid.Children, kid.ID)
-	_, err := lc.Task.Edit(kid)
-	if err == nil {
-		t.Error("Adding the a task as it's own children did not return an error")
-	}
+func TestTaskDuplicateParents(t *testing.T) {
+	_, err := NewTask(
+		WithID("some-id"),
+		WithDescription("foo"),
+		WithParents([]string{"dup", "dup"}),
+	)
+	require.Error(t, err)
+	require.EqualError(t, err, "found duplicate ids in the Parents field")
 }
 
 func TestShortID(t *testing.T) {
@@ -403,11 +382,11 @@ func TestAddParentFunc(t *testing.T) {
 	kid, _ = lc.Task.GetWithID("kid-func", "", "/active")
 	parent, _ = lc.Task.GetWithID("parent-func", "", "/active")
 
-	if !ContainsString(kid.Parents, parent.ID) {
+	if !containsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
 	}
 
-	if !ContainsString(parent.Children, kid.ID) {
+	if !containsString(parent.Children, kid.ID) {
 		t.Error("Setting parent did not also set child on parent resource")
 	}
 }
@@ -437,11 +416,11 @@ func TestAddChildFunc(t *testing.T) {
 	kid, _ = lc.Task.GetWithID("kid-func2", "", "/active")
 	parent, _ = lc.Task.GetWithID("parent-func2", "", "/active")
 
-	if !ContainsString(kid.Parents, parent.ID) {
+	if !containsString(kid.Parents, parent.ID) {
 		t.Error("Setting parent via functiono did not work")
 	}
 
-	if !ContainsString(parent.Children, kid.ID) {
+	if !containsString(parent.Children, kid.ID) {
 		t.Error("Setting parent did not also set child on parent resource")
 	}
 }
@@ -521,17 +500,13 @@ func TestHideAfterDue(t *testing.T) {
 	now := time.Now()
 	sooner := now.Add(time.Minute * 5)
 	later := now.Add(time.Minute * 10)
-	ts := &Task{
-		ID:          "test-hide-after-due",
-		Description: "test-hide-after-due",
-		HideUntil:   &later,
-		Due:         &sooner,
-	}
-	_, err := lc.Task.Add(ts)
-
-	if err == nil {
-		t.Error("Adding a task with hideuntil later than due did not produce an error", sooner, later)
-	}
+	_, err := NewTask(
+		WithID("test-hide-after-due"),
+		WithDescription("test-hide-after-due"),
+		WithHideUntil(&later),
+		WithDue(&sooner),
+	)
+	require.Error(t, err)
 }
 
 func TestDefaultBucketName(t *testing.T) {

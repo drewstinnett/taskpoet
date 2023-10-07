@@ -485,6 +485,11 @@ type completedCol struct{}
 func (d completedCol) String() string { return "Completed" }
 func (d completedCol) Width() int     { return 13 }
 
+func (p *Poet) exists(t *Task) bool {
+	_, err := p.Task.GetWithID(t.ID, t.PluginID, "")
+	return err == nil
+}
+
 // Delete marks a task as deleted
 func (p *Poet) Delete(t *Task) error {
 	curPath := t.DetectKeyPath()

@@ -8,17 +8,18 @@ import (
 
 // listPluginsCmd represents the listPlugins command
 var listPluginsCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List Plugins",
-	Long:  `List Plugins`,
+	Use:    "list",
+	Short:  "List Plugins",
+	Long:   `List Plugins`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		ps, err := localClient.Task.GetPlugins()
-		CheckErr(err)
+		ps, err := poetC.Task.GetPlugins()
+		checkErr(err)
 		for name, c := range ps {
 			p := c()
 			fmt.Printf("%+v - %+v\n", name, p.Description())
-			//err := localClient.Task.SyncPlugin(p)
-			//CheckErr(err)
+			// err := localClient.Task.SyncPlugin(p)
+			// CheckErr(err)
 		}
 	},
 }

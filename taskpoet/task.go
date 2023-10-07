@@ -11,60 +11,93 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
-	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
 var prefixes []string
 
+// Task is the actual task item
 type Task struct {
-	ID           string     `json:"id"`
-	PluginID     string     `json:"plugin_id"`
-	Description  string     `json:"description"`
-	Due          *time.Time `json:"due,omitempty"`
-	HideUntil    *time.Time `json:"hide_until,omitempty"`
-	Completed    *time.Time `json:"completed,omitempty"`
-	Added        time.Time  `json:"added,omitempty"`
-	EffortImpact uint       `json:"effort_impact"`
-	Children     []string   `json:"children,omitempty"`
-	Parents      []string   `json:"parents,omitempty"`
-	Tags         []string   `json:"tags,omitempty"`
+	ID           string       `json:"id"`
+	PluginID     string       `json:"plugin_id"`
+	Description  string       `json:"description"`
+	Due          *time.Time   `json:"due,omitempty"`
+	HideUntil    *time.Time   `json:"hide_until,omitempty"`   // HideUntil is similar to 'wait' in taskwarrior
+	CancelAfter  *time.Time   `json:"cancel_after,omitempty"` // CancelAfter is similar to 'until' in taskwarrior
+	Completed    *time.Time   `json:"completed,omitempty"`
+	Reviewed     *time.Time   `json:"reviewed,omitempty"`
+	Deleted      *time.Time   `json:"deleted,omitempty"`
+	Added        time.Time    `json:"added,omitempty"`
+	EffortImpact EffortImpact `json:"effort_impact"`
+	Children     []string     `json:"children,omitempty"`
+	Parents      []string     `json:"parents,omitempty"`
+	Tags         []string     `json:"tags,omitempty"`
+	Comments     []Comment    `json:"comments,omitempty"`
+	Project      string       `json:"project,omitempty"`
 }
 
+// Comment is just a little comment/note on a task
+type Comment struct {
+	Added   time.Time `json:"added,omitempty"`
+	Comment string    `json:"comment,omitempty"`
+}
+
+// DueString returns a string representation of Due
+func (t Task) DueString() string {
+	if t.Due != nil {
+		return t.Due.Format("2006-01-02")
+	}
+	return ""
+}
+
+// Tasks represents multiple Task items
+type Tasks []Task
+
+// Len helps to satisfy the sort interface
+func (t Tasks) Len() int {
+	return len(t)
+}
+
+// Swap helps to satisfy the sort interface
+func (t Tasks) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+}
+
+// Less helps to satisfy the sort interface
+func (t Tasks) Less(i, j int) bool {
+	return t[i].Added.Before(t[j].Added)
+}
+
+// DetectKeyPath finds the key path for a given task
 func (t *Task) DetectKeyPath() []byte {
 	// Is this a new active task, or just logging completed?
-	var keyPath string
-	var pluginID string
-	if t.PluginID == "" {
-		pluginID = "builtin"
-	} else {
+	pluginID := DefaultPluginID
+	if t.PluginID != "" {
 		pluginID = t.PluginID
 	}
-	if t.Completed == nil {
-		// keyPath = fmt.Sprintf("/active/%s", t.ID)
-		keyPath = filepath.Join("/active", pluginID, t.ID)
-	} else {
-		keyPath = filepath.Join("/completed", pluginID, t.ID)
-		//keyPath = fmt.Sprintf("/completed/%s", t.ID)
+	switch {
+	case t.Deleted != nil:
+		return []byte(filepath.Join("/deleted", pluginID, t.ID))
+	case t.Completed != nil:
+		return []byte(filepath.Join("/completed", pluginID, t.ID))
+	default:
+		return []byte(filepath.Join("/active", pluginID, t.ID))
 	}
-	return []byte(keyPath)
-
 }
 
-func (t *Task) SetDefaults(d *Task) {
-	now := time.Now()
+func (t *Task) setDefaults(d *Task) {
 	if t.Added.IsZero() {
-		t.Added = now
+		t.Added = time.Now()
 	}
 
 	// If no ID is set, just generate one
 	if t.ID == "" {
-		t.ID = fmt.Sprintf(uuid.New().String())
+		t.ID = uuid.New().String()
 	}
 
 	// Set the plugin id to default if not set
 	if t.PluginID == "" {
-		t.PluginID = "builtin"
+		t.PluginID = DefaultPluginID
 	}
 	// Handle defaults due
 	if d != nil {
@@ -72,27 +105,20 @@ func (t *Task) SetDefaults(d *Task) {
 			t.Due = d.Due
 		}
 	}
-
 }
 
+// ShortID is just the first 5 characters of the ID
 func (t *Task) ShortID() string {
-	if len(t.ID) > 5 {
-		return t.ID[0:5]
-	} else {
-		return t.ID
-	}
+	return t.ID[0:min(len(t.ID), 5)]
 }
 
-type TaskValidateOpts struct {
-	IsExisting bool
-}
-
+// TaskService is the interface to tasks...we'll delete this junk
 type TaskService interface {
 	// This should replace New, and Log
-	Add(t, d *Task) (*Task, error)
-	AddSet(t []Task, d *Task) error
+	Add(t *Task) (*Task, error)
+	AddSet(t []Task) error
 
-	BucketName() string
+	// BucketName() string
 
 	// Helper for adding Parent
 	AddParent(c, p *Task) error
@@ -108,14 +134,14 @@ type TaskService interface {
 	// Should we use this instead of above funcs?
 	AddOrEditSet(tasks []Task) error
 
-	// Delete
-	Delete(t *Task) error
+	// Purge completely removes a task out of the DB
+	Purge(t *Task) error
 
 	// Complete a task
 	Complete(t *Task) error
 
 	// Check to ensure Task is in a valid state
-	Validate(t *Task, o *TaskValidateOpts) error
+	// Validate(t *Task, o *TaskValidateOpts) error
 
 	// Sweet lord, this gettin' confusin' Drew
 	GetPlugins() (map[string]Creator, error)
@@ -129,7 +155,7 @@ type TaskService interface {
 	Log(t, d *Task) (*Task, error)
 
 	// This on prolly needs work
-	List(prefix string) ([]Task, error)
+	List(prefix string) (Tasks, error)
 	/*
 	   Path Conventions
 	   /${state}/${plugin-id}/${id}
@@ -150,22 +176,22 @@ type TaskService interface {
 	GetIDsByPrefix(prefix string) ([]string, error)
 }
 
-func (svc *TaskServiceOp) BucketName() string {
-	return fmt.Sprintf("/%v/tasks", svc.localClient.Namespace)
-}
+// GetStates returns types of states
 func (svc *TaskServiceOp) GetStates() []string {
-	return []string{"active", "completed"}
+	return []string{"active", "completed", "deleted"}
 }
 
+// GetStatePaths is each of the states with a / prefix i guess
 func (svc *TaskServiceOp) GetStatePaths() []string {
-	var r []string
-	for _, item := range svc.GetStates() {
-		r = append(r, filepath.Join("/", item))
-
+	s := svc.GetStates()
+	r := make([]string, len(s))
+	for idx, item := range s {
+		r[idx] = filepath.Join("/", item)
 	}
 	return r
 }
 
+// SyncPlugin syncs a plugin or whatever
 func (svc *TaskServiceOp) SyncPlugin(tp TaskPlugin) error {
 	ts, err := tp.Sync()
 	if err != nil {
@@ -175,41 +201,39 @@ func (svc *TaskServiceOp) SyncPlugin(tp TaskPlugin) error {
 	if err != nil {
 		return err
 	}
-	log.Println(ts)
 	return nil
 }
 
+// GetPlugins returns all plugins
 func (svc *TaskServiceOp) GetPlugins() (map[string]Creator, error) {
 	return TaskPlugins, nil
-
 }
 
+// AddParent adds a parent to a child command
 func (svc *TaskServiceOp) AddParent(c, p *Task) error {
-
 	c.Parents = append(c.Parents, p.ID)
 	p.Children = append(p.Children, c.ID)
 
-	err := svc.EditSet([]Task{*c, *p})
-	if err != nil {
+	if err := svc.EditSet([]Task{*c, *p}); err != nil {
 		return err
 	}
 
 	return nil
 }
 
+// AddChild adds a child to a parent
 func (svc *TaskServiceOp) AddChild(p, c *Task) error {
-
 	p.Children = append(p.Children, c.ID)
 	c.Parents = append(c.Parents, p.ID)
 
-	err := svc.EditSet([]Task{*c, *p})
-	if err != nil {
+	if err := svc.EditSet([]Task{*c, *p}); err != nil {
 		return err
 	}
 
 	return nil
 }
 
+// AddOrEditSet adds or edits a set of tasks
 func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
 	var addSet []Task
 	var editSet []Task
@@ -222,43 +246,34 @@ func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
 		}
 	}
 
-	err := svc.localClient.Task.AddSet(addSet, nil)
-	if err != nil {
+	if err := svc.localClient.Task.AddSet(addSet); err != nil {
 		return err
 	}
-	err = svc.localClient.Task.EditSet(editSet)
-	if err != nil {
+	if err := svc.localClient.Task.EditSet(editSet); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (svc *TaskServiceOp) EditSet(tasks []Task) error {
+// EditSet edits a single set of tasks
+func (svc *TaskServiceOp) EditSet(tasks []Task) error { //nolint:funlen,gocognit
 	// We need to merge the new value with the old
 	var mergedTasks []Task
 
 	for _, t := range tasks {
+		t := t
 		originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 		if err != nil {
-			return errors.New("Cannot edit a task that did not previously exist: " + t.ID)
+			return errors.New("cannot edit a task that did not previously exist: " + t.ID)
 		}
 
 		// Right now we wanna use the Complete function to do this, not edit...at least yet
 		if originalTask.Completed != t.Completed {
-			return errors.New("Editing the Completed field is not yet supported as it changes the path")
+			return errors.New("editing the Completed field is not yet supported as it changes the path")
 		}
 
-		err = svc.Validate(&t, &TaskValidateOpts{IsExisting: true})
-		if err != nil {
-			return err
-		}
-
-		// Now do the merge
-		if err != nil {
-			return err
-		}
-		//var mergedTask Task
+		// var mergedTask Task
 		// Decide how to handle missing data and such
 		// Added should never change
 		t.Added = originalTask.Added
@@ -289,19 +304,15 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		for _, t := range mergedTasks {
 			taskSerial, err := json.Marshal(t)
-			log.Warning(t)
 			if err != nil {
 				return err
 			}
-			b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-			err = b.Put(t.DetectKeyPath(), taskSerial)
-			if err != nil {
-				return err
+			if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); perr != nil {
+				return perr
 			}
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
@@ -309,39 +320,39 @@ func (svc *TaskServiceOp) EditSet(tasks []Task) error {
 	return nil
 }
 
-func (svc *TaskServiceOp) Delete(t *Task) error {
+// Purge removes a task from the database
+func (svc *TaskServiceOp) Purge(t *Task) error {
 	originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 	if err != nil {
 		return errors.New("Cannot delete a task that did not previously exist: " + t.ID)
 	}
 
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = b.Delete(originalTask.DetectKeyPath())
-		if err != nil {
+	if svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		if derr := svc.localClient.getBucket(tx).Delete(originalTask.DetectKeyPath()); derr != nil {
 			return err
 		}
 		return nil
-	})
+	}) != nil {
+		return err
+	}
 
 	return nil
 }
 
+// Edit edits an existing task
 func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
-	//originalTask, err := svc.GetByID(t.ID)
 	originalTask, err := svc.GetWithExactPath(t.DetectKeyPath())
 	if err != nil {
-		return nil, errors.New("Cannot edit a task that did not previously exist: " + t.ID)
+		return nil, errors.New("cannot edit a task that did not previously exist: " + t.ID)
+	}
+
+	if verr := t.Validate(); verr != nil {
+		return nil, verr
 	}
 
 	// Right now we wanna use the Complete function to do this, not edit...at least yet
 	if originalTask.Completed != t.Completed {
-		return nil, errors.New("Editing the Completed field is not yet supported as it changes the path")
-	}
-
-	err = svc.Validate(t, &TaskValidateOpts{IsExisting: true})
-	if err != nil {
-		return nil, err
+		return nil, errors.New("editing the Completed field is not yet supported as it changes the path")
 	}
 
 	taskSerial, err := json.Marshal(t)
@@ -349,64 +360,20 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 		return nil, err
 	}
 
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = b.Put(t.DetectKeyPath(), taskSerial)
-		if err != nil {
+	if uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		if err := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); err != nil {
 			return err
 		}
 		return nil
-	})
+	}); uerr != nil {
+		return nil, uerr
+	}
 
 	return t, nil
 }
 
-func (svc *TaskServiceOp) Validate(t *Task, o *TaskValidateOpts) error {
-	if t.Description == "" {
-		return fmt.Errorf("Missing description for Task")
-	}
-
-	if strings.Contains(t.ID, "/") {
-		return fmt.Errorf("ID Cannot contain a slash (/)")
-	}
-
-	// If not specified
-	if o == nil {
-		o = &TaskValidateOpts{}
-	}
-
-	// IF NEW, Make sure this ID doesn't already exist
-	if !o.IsExisting {
-		_, err := svc.GetWithID(t.ID, t.PluginID, "")
-		if err == nil {
-			return fmt.Errorf("Task with ID %v already exists", t.ID)
-		}
-	}
-
-	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
-	if t.HideUntil != nil && t.Due != nil {
-		if t.HideUntil.After(*t.Due) {
-			return fmt.Errorf("HideUntil cannot be later than Due")
-		}
-	}
-
-	// Make sure we didn't add ourself
-	if ContainsString(t.Parents, t.ID) {
-		return fmt.Errorf("Self id is set in the parents, we don't do that")
-	}
-	if ContainsString(t.Children, t.ID) {
-		return fmt.Errorf("Self id is set in the children, we don't do that")
-	}
-
-	// Make sure Parents contains no duplicates
-	if !CheckUniqueStringSlice(t.Parents) {
-		return fmt.Errorf("Found duplicate ids in the Parents field")
-	}
-	return nil
-}
-
+// Describe describes a task
 func (svc *TaskServiceOp) Describe(t *Task) error {
-	//data := make([][]string, 0)
 	now := time.Now()
 	var due string
 	var wait string
@@ -414,18 +381,18 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 	if t.Due == nil {
 		due = "-"
 	} else {
-		due = HumanizeDuration(t.Due.Sub(now))
+		due = humanizeDuration(t.Due.Sub(now))
 	}
 	if t.HideUntil == nil {
 		wait = "-"
 	} else {
-		wait = HumanizeDuration(t.HideUntil.Sub(now))
+		wait = humanizeDuration(t.HideUntil.Sub(now))
 	}
-	added := HumanizeDuration(t.Added.Sub(now))
+	added := humanizeDuration(t.Added.Sub(now))
 	if t.Completed == nil {
 		completed = "-"
 	} else {
-		completed = HumanizeDuration(t.Completed.Sub(now))
+		completed = humanizeDuration(t.Completed.Sub(now))
 	}
 	var parentsBuff bytes.Buffer
 	var childrenBuff bytes.Buffer
@@ -457,15 +424,18 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 		{"Tags", fmt.Sprintf("%+v", t.Tags), ""},
 	}
 
-	pterm.DefaultTable.WithHasHeader().WithData(data).Render()
-	return nil
+	return pterm.DefaultTable.WithHasHeader().WithData(data).Render()
 }
 
+// TaskServiceOp is the TaskService Operator
 type TaskServiceOp struct {
-	localClient *LocalClient
-	plugins     []TaskPlugin
+	localClient *Poet
 }
 
+// DefaultPluginID is just the string used as the built in plugin default
+const DefaultPluginID string = "builtin"
+
+// GetWithPartialID returns using a partial id of the task
 func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*Task, error) {
 	var possibleStates []string
 	if state == "" {
@@ -475,7 +445,7 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 	}
 	matches := []string{}
 	if pluginID == "" {
-		pluginID = "builtin"
+		pluginID = DefaultPluginID
 	}
 	qualifiedPartialID := filepath.Join(pluginID, partialID)
 	for _, prefix := range possibleStates {
@@ -490,45 +460,34 @@ func (svc *TaskServiceOp) GetWithPartialID(partialID, pluginID, state string) (*
 		}
 	}
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("No matches for %v found in %v", partialID, prefixes)
+		return nil, fmt.Errorf("no matches for %v found in %v", partialID, prefixes)
 	} else if len(matches) > 1 {
 		return nil, fmt.Errorf(
-			"More than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
+			"more than 1 match for %v found in %v, please try using more of the ID. Returned: %v", partialID, prefixes, matches)
 	}
-	t, err := svc.GetWithExactPath([]byte(matches[0]))
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
-
+	return svc.GetWithExactPath([]byte(matches[0]))
 }
 
+// GetWithExactPath returns a task from an exact path
 func (svc *TaskServiceOp) GetWithExactPath(path []byte) (*Task, error) {
 	var task Task
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		taskBytes := b.Get([]byte(fmt.Sprintf("%s", path)))
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		taskBytes := svc.localClient.getBucket(tx).Get(path)
 		if taskBytes == nil {
-			return fmt.Errorf("Could not find task: %s", path)
+			return fmt.Errorf("could not find task: %s", path)
 		}
-		err := json.Unmarshal(taskBytes, &task)
-		if err != nil {
-			return err
-		}
-
-		return nil
-
-	})
-	if err != nil {
+		return json.Unmarshal(taskBytes, &task)
+	}); err != nil {
 		return nil, err
 	}
 	return &task, nil
 }
 
+// GetWithID returns a task from an ID
 func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 	var possibleKeypaths []string
 	if pluginID == "" {
-		pluginID = "builtin"
+		pluginID = DefaultPluginID
 	}
 
 	if state != "" {
@@ -543,177 +502,137 @@ func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 		if err == nil {
 			return task, nil
 		}
-
 	}
-	return nil, fmt.Errorf("Could not find that task at any of %v", possibleKeypaths)
-
+	return nil, fmt.Errorf("could not find that task at any of %v", possibleKeypaths)
 }
 
+// Complete marks a task as completed
 func (svc *TaskServiceOp) Complete(t *Task) error {
-	now := time.Now()
 	activePath := t.DetectKeyPath()
-	t.Completed = &now
+	t.Completed = nowPTR()
 	completePath := t.DetectKeyPath()
-	err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
+	if err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		taskSerial, err := json.Marshal(t)
 		if err != nil {
 			return err
 		}
-		err = b.Put(completePath, taskSerial)
-		if err != nil {
-			return err
+		b := svc.localClient.getBucket(tx)
+		if perr := b.Put(completePath, taskSerial); perr != nil {
+			return perr
 		}
-		b.Delete(activePath)
-		return nil
-	})
-
-	if err != nil {
+		return b.Delete(activePath)
+	}); err != nil {
 		return err
 	}
 	return nil
-
 }
 
-func (svc *TaskServiceOp) List(prefix string) ([]Task, error) {
-	var tasks []Task
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err := b.ForEach(func(k, v []byte) error {
+// List lists items under a given prefix
+func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
+	var tasks Tasks
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		if err := svc.localClient.getBucket(tx).ForEach(func(k, v []byte) error {
 			var task Task
-			err := json.Unmarshal(v, &task)
-			if err != nil {
+			if err := json.Unmarshal(v, &task); err != nil {
 				return err
 			}
 			if strings.HasPrefix(string(k), prefix) {
 				tasks = append(tasks, task)
 			}
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
 	return tasks, nil
 }
 
-// Shortcut utility to add a new task, but a completed time of 'now'
+// Log is a Shortcut utility to add a new task, but a completed time of 'now'
 func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 	if t.Completed == nil {
-		n := time.Now()
-		t.Completed = &n
+		t.Completed = nowPTR()
 	}
-	ret, err := svc.Add(t, d)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
-
+	return svc.Add(t)
 }
-func (svc *TaskServiceOp) AddSet(t []Task, d *Task) error {
+
+// AddSet adds a task set
+func (svc *TaskServiceOp) AddSet(t []Task) error {
 	for _, task := range t {
-		_, err := svc.Add(&task, d)
-		if err != nil {
-			log.Debug("Error adding task in set", t)
+		task := task
+		if _, err := svc.Add(&task); err != nil {
 			return err
 		}
 	}
-	//return errors.New("Thing")
 	return nil
 }
 
-func (svc *TaskServiceOp) Add(t, d *Task) (*Task, error) {
+// Add adds a new task
+func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	// t is the new task
-	// d are the defaults
-	// Detect the path based on if t.Completed has been used
+	t.setDefaults(&svc.localClient.Default)
 
-	t.SetDefaults(d)
-
-	// Validate that Task is actually good
-	err := svc.Validate(t, &TaskValidateOpts{IsExisting: false})
-	if err != nil {
-		return nil, err
+	// Does this already exist??
+	if svc.localClient.exists(t) {
+		return nil, errExists
 	}
+
 	taskSerial, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
 	}
 
-	keyPath := t.DetectKeyPath()
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = bucket.Put(keyPath, taskSerial)
-		if err != nil {
-			return err
+	if uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
+		if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); perr != nil {
+			return perr
 		}
 		return nil
-	})
+	}); uerr != nil {
+		return nil, uerr
+	}
 
 	return t, nil
-
 }
 
-/*func (svc *TaskServiceOp) New(t *Task, d *Task) (*Task, error) {
-	// t is the new task
-	// d are the defaults
-	if t.Description == "" {
-		return nil, fmt.Errorf("Missing description for Task")
-	}
-	now := time.Now()
-	if t.Added.IsZero() {
-		t.Added = now
-	}
-
-	// If no ID is set, just generate one
-	if t.ID == "" {
-		t.ID = fmt.Sprintf(uuid.New().String())
-	}
-
-	// Handle defaults due
-	if d != nil {
-		if t.Due == nil && d.Due != nil {
-			t.Due = d.Due
-		}
-	}
-	taskSerial, err := json.Marshal(t)
-	if err != nil {
-		return nil, err
-	}
-
-	// Is this a new active task, or just logging completed?
-	var keyPath string
-	if t.Completed == nil {
-		keyPath = fmt.Sprintf("/active/%s", t.ID)
-	} else {
-		keyPath = fmt.Sprintf("/completed/%s", t.ID)
-	}
-	err = svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err = bucket.Put([]byte(keyPath), taskSerial)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
-	return t, nil
-
-}
-*/
-
+// GetIDsByPrefix returns a list of ids matching the given prefix
 func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 	allIDs := []string{}
 
-	err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(svc.localClient.Task.BucketName()))
-		err := bucket.ForEach(func(k, v []byte) error {
+	if err := svc.localClient.DB.View(func(tx *bolt.Tx) error {
+		if err := svc.localClient.getBucket(tx).ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				allIDs = append(allIDs, string(k))
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return allIDs, nil
+}
+
+// CompleteIDsWithPrefix returns a list of ids matching the given prefix and
+// autocomplete pattern
+func (p Poet) CompleteIDsWithPrefix(prefix, toComplete string) []string {
+	allIDs := []string{}
+
+	err := p.DB.View(func(tx *bolt.Tx) error {
+		err := p.getBucket(tx).ForEach(func(k, v []byte) error {
+			if strings.HasPrefix(string(k), prefix) {
+				idPieces := strings.Split(string(k), "/")
+				id := idPieces[len(idPieces)-1]
+				var task Task
+				panicIfErr(json.Unmarshal(v, &task))
+				if strings.HasPrefix(id, toComplete) || strings.Contains(task.Description, toComplete) {
+					allIDs = append(allIDs, fmt.Sprintf("%v\t%v", id[0:5], task.Description))
+				}
 			}
 			return nil
 		})
@@ -722,11 +641,164 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 		}
 		return nil
 	})
-
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
-	return allIDs, nil
+	return allIDs
+}
 
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+// TaskOption is a functional option for a new Task
+type TaskOption func(*Task)
+
+// WithEffortImpact sets the impact statement on create
+func WithEffortImpact(e EffortImpact) TaskOption {
+	return func(t *Task) {
+		t.EffortImpact = e
+	}
+}
+
+// WithDescription sets the description on create
+func WithDescription(d string) TaskOption {
+	return func(t *Task) {
+		t.Description = d
+	}
+}
+
+// WithID sets the UUID on create
+func WithID(i string) TaskOption {
+	return func(t *Task) {
+		t.ID = i
+	}
+}
+
+// WithChildren set the children of a task
+func WithChildren(c []string) TaskOption {
+	return func(t *Task) {
+		t.Children = c
+	}
+}
+
+// WithParents set the parents of a task
+func WithParents(p []string) TaskOption {
+	return func(t *Task) {
+		t.Parents = p
+	}
+}
+
+// WithTags sets the tags on create
+func WithTags(s []string) TaskOption {
+	return func(t *Task) {
+		t.Tags = s
+	}
+}
+
+// WithDue sets the due date on create
+func WithDue(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.Due = d
+	}
+}
+
+// WithCompleted sets the completed date on create
+func WithCompleted(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.Completed = d
+	}
+}
+
+// WithHideUntil sets the hide until on create
+func WithHideUntil(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.HideUntil = d
+	}
+}
+
+// WithTaskWarriorTask imports a task from a task warrior task
+func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
+	return func(t *Task) {
+		t.Description = twItem.Description
+		t.ID = twItem.UUID
+		t.Tags = twItem.Tags
+		t.Due = (*time.Time)(twItem.Due)
+		t.Completed = (*time.Time)(twItem.End)
+		t.Reviewed = (*time.Time)(twItem.Reviewed)
+		t.CancelAfter = (*time.Time)(twItem.Until)
+		if twItem.Status == "deleted" {
+			t.Deleted = (*time.Time)(twItem.End)
+		}
+		if twItem.Entry == nil {
+			t.Added = time.Now()
+		} else {
+			t.Added = time.Time(*twItem.Entry)
+		}
+		if twItem.Annotations != nil {
+			t.Comments = make([]Comment, len(twItem.Annotations))
+			for idx, a := range twItem.Annotations {
+				t.Comments[idx].Comment = a.Description
+				t.Comments[idx].Added = time.Time(*a.Entry)
+			}
+		}
+
+		if (twItem.Wait != nil) && (twItem.Due != nil) && (*time.Time)(twItem.Wait).After((time.Time)(*twItem.Due)) {
+			nh := t.Due.Add(-1 * time.Minute)
+			t.HideUntil = &nh
+		} else {
+			t.HideUntil = (*time.Time)(twItem.Wait)
+		}
+	}
+}
+
+// MustNewTask returns a task or panics
+func MustNewTask(options ...TaskOption) *Task {
+	got, err := NewTask(options...)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+// Validate makes sure the task isn't malformed
+func (t Task) Validate() error {
+	if t.Description == "" {
+		return errors.New("missing description for Task")
+	}
+	if strings.Contains(t.ID, "/") {
+		return errors.New("ID Cannot contain a slash (/)")
+	}
+	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
+	if t.HideUntil != nil && t.Due != nil {
+		if t.HideUntil.After(*t.Due) {
+			return fmt.Errorf("HideUntil cannot be later than Due")
+		}
+	}
+
+	// Make sure we didn't add ourself
+	if containsString(t.Parents, t.ID) {
+		return fmt.Errorf("self id is set in the parents, we don't do that")
+	}
+	if containsString(t.Children, t.ID) {
+		return fmt.Errorf("self id is set in the children, we don't do that")
+	}
+	// kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"})
+	// Make sure Parents contains no duplicates
+	if !CheckUniqueStringSlice(t.Parents) {
+		return fmt.Errorf("found duplicate ids in the Parents field")
+	}
+	return nil
+}
+
+// NewTask returns a new task given functional options
+func NewTask(options ...TaskOption) (*Task, error) {
+	task := &Task{}
+	for _, opt := range options {
+		opt(task)
+	}
+	return task, task.Validate()
 }

@@ -12,10 +12,10 @@ var describeCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Aliases: []string{"desc", "d"},
 	Run: func(cmd *cobra.Command, args []string) {
-		task, err := localClient.Task.GetWithPartialID(args[0], "", "")
-		CheckErr(err)
-		err = localClient.Task.Describe(task)
-		CheckErr(err)
+		task, err := poetC.Task.GetWithPartialID(args[0], "", "")
+		checkErr(err)
+		err = poetC.Task.Describe(task)
+		checkErr(err)
 	},
 }
 

@@ -1,29 +1,35 @@
 package cmd
 
 import (
-	"log"
+	"github.com/charmbracelet/log"
 
 	"github.com/spf13/cobra"
 )
 
 // completeCmd represents the complete command
 var completeCmd = &cobra.Command{
-	Use:     "complete TASK",
-	Short:   "Mark a task as complete",
-	Long:    `Mark a task as complete`,
+	Use:     "done TASK",
+	Short:   "Mark a task as done",
+	Long:    `Mark a task as done`,
 	Aliases: []string{"c"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		task, err := localClient.Task.GetWithPartialID(args[0], "", "/active")
-		CheckErr(err)
-		err = localClient.Task.Complete(task)
-		CheckErr(err)
-		log.Printf("Completed task: '%v', nice work!", task.Description)
+		task, err := poetC.Task.GetWithPartialID(args[0], "", "/active")
+		checkErr(err)
+		checkErr(poetC.Task.Complete(task))
+		log.Info("Completed task, nice work!", "task", task.Description)
+	},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(completeCmd)
+	completeCmd.PersistentFlags().IntP("limit", "l", 100, "Limit to N results")
 
 	// Here you will define your flags and configuration settings.
 

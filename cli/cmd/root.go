@@ -1,12 +1,17 @@
+/*
+Package cmd is the command line utility
+*/
 package cmd
 
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"regexp"
+	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
+	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -15,21 +20,23 @@ import (
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
-var namespace string
-var localClient *taskpoet.LocalClient
-var Verbose bool
-var dbConfig *taskpoet.DBConfig
-var taskDefaults *taskpoet.Task
+var (
+	cfgFile   string
+	namespace string
+	poetC     *taskpoet.Poet
+	verbose   bool
+	// dbConfig     *taskpoet.DBConfig
+	// logger       *slog.Logger
+)
 
 // rootCmd represents the base command when called without any subcommands
-//var rootCmd *cobra.Command
+// var rootCmd *cobra.Command
 
-//var rootCmd = &cobra.Command{
+// NewRootCmd is the root command generator
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "taskpoet",
-		Short: "Do task tracking similiar to the olden ways of TaskWarrior",
+		Short: "Do task tracking similar to the olden ways of TaskWarrior",
 		Long: `Designed to be similar to TaskWarrior, with some updated features, and specifics
 around the Tom Limoncelli methods to task management.
 
@@ -43,9 +50,6 @@ Effort/Impact Assessment, based on Limoncelli concept
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if Verbose {
-				log.SetLevel(log.DebugLevel)
-			}
 		},
 	}
 	return cmd
@@ -55,9 +59,8 @@ var rootCmd = NewRootCmd()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-
 func Execute() {
-	//rootCmd := NewRootCmd()
+	// rootCmd := NewRootCmd()
 
 	cmd, _, err := rootCmd.Find(os.Args[1:])
 	// default cmd if no cmd is given
@@ -71,13 +74,12 @@ func Execute() {
 		os.Exit(1)
 	}
 
-	//cobra.CheckErr(rootCmd.Execute())
+	// cobra.CheckErr(rootCmd.Execute())
 }
 
-//var rootCmd *cobra.Command
-
+// var rootCmd *cobra.Command
 func init() {
-	//rootCmd = NewRootCmd()
+	// rootCmd = NewRootCmd()
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
@@ -86,7 +88,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "Verbose logging")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose logging")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -111,35 +113,124 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
 	var err error
 
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		log.Debugln("Using config file:", viper.ConfigFileUsed())
+	// set global logger with custom options
+	level := log.InfoLevel
+	if verbose {
+		level = log.DebugLevel
 	}
-	// Configuration for DB
-	dbPath := viper.GetString("dbpath")
-	dbConfig = &taskpoet.DBConfig{Path: dbPath, Namespace: namespace}
-	log.Debug("Using DB at: ", dbPath)
+	log.SetLevel(level)
 
-	err = taskpoet.InitDB(dbConfig)
-	CheckErr(err)
-
-	localClient, err = taskpoet.NewLocalClient(dbConfig)
-	CheckErr(err)
+	// If a config file is found, read it in.
+	if cerr := viper.ReadInConfig(); cerr == nil {
+		log.Debug("Using config file", "file", viper.ConfigFileUsed())
+	}
+	poetC, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
+	checkErr(err)
 
 	// Declare defaults
-	taskDefaults = &taskpoet.Task{}
+	// poetC.Default = taskpoet.Task{}
 	defaultDue := viper.GetString("defaults.due")
 	if defaultDue != "" {
-		now := time.Now()
 		dueDuration, err := taskpoet.ParseDuration(defaultDue)
-		CheckErr(err)
-		due := now.Add(dueDuration)
-		taskDefaults.Due = &due
+		checkErr(err)
+		due := time.Now().Add(dueDuration)
+		poetC.Default.Due = &due
 	}
 }
 
-func CheckErr(err error) {
+func checkErr(err error) {
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
+}
+
+func noComplete(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return []string{}, cobra.ShellCompDirectiveNoFileComp
+}
+
+// mustGetCmd uses generics to get a given flag with the appropriate Type from a cobra.Command
+func mustGetCmd[T []int | []string | int | uint | string | bool | time.Duration](cmd *cobra.Command, s string) T {
+	switch any(new(T)).(type) {
+	case *int:
+		item, err := cmd.Flags().GetInt(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *uint:
+		item, err := cmd.Flags().GetUint(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *string:
+		item, err := cmd.Flags().GetString(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *bool:
+		item, err := cmd.Flags().GetBool(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *[]int:
+		item, err := cmd.Flags().GetIntSlice(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *[]string:
+		item, err := cmd.Flags().GetStringSlice(s)
+		panicIfErr(err)
+		return any(item).(T)
+	case *time.Duration:
+		item, err := cmd.Flags().GetDuration(s)
+		panicIfErr(err)
+		return any(item).(T)
+	default:
+		panic(fmt.Sprintf("unexpected use of mustGetCmd: %v", reflect.TypeOf(s)))
+	}
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func applyCobra(cmd *cobra.Command, args []string, opts *taskpoet.TableOpts) error {
+	var err error
+	if opts.FilterParams.Limit, err = cmd.PersistentFlags().GetInt("limit"); err != nil {
+		return err
+	}
+	var re *regexp.Regexp
+	if len(args) > 0 {
+		opts.FilterParams.Regex = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+		log.Debug("Showing tasks that match", "regex", re)
+	} else {
+		opts.FilterParams.Regex = regexp.MustCompile(".*")
+	}
+	return nil
+}
+
+func mustTableOptsWithCmd(cmd *cobra.Command, args []string) *taskpoet.TableOpts {
+	got, err := tableOptsWithCmd(cmd, args)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+func tableOptsWithCmd(cmd *cobra.Command, args []string) (*taskpoet.TableOpts, error) {
+	opts := &taskpoet.TableOpts{
+		FilterParams: taskpoet.FilterParams{},
+	}
+	var err error
+	if opts.FilterParams.Limit, err = cmd.PersistentFlags().GetInt("limit"); err != nil {
+		return nil, err
+	}
+	var re *regexp.Regexp
+	if len(args) > 0 {
+		opts.FilterParams.Regex = regexp.MustCompile(fmt.Sprintf("(?i)%v", strings.Join(args, " ")))
+		log.Debug("Showing tasks that match", "regex", re)
+	} else {
+		opts.FilterParams.Regex = regexp.MustCompile(".*")
+	}
+	return opts, nil
+}
+
+func bindTableOpts(cmd *cobra.Command) {
+	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
 }

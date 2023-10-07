@@ -2,26 +2,29 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 
+	"github.com/charmbracelet/log"
+
+	// Include all plugins
 	_ "github.com/drewstinnett/taskpoet/plugins/task/all"
 	"github.com/spf13/cobra"
 )
 
 // syncCmd represents the sync command
 var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Sync Tasks from Plugins",
-	Long:  `Pull in tasks from external places like Gitlab, Github...ServiceNow maybe even?`,
+	Use:    "sync",
+	Short:  "Sync Tasks from Plugins",
+	Long:   `Pull in tasks from external places like Gitlab, Github...ServiceNow maybe even?`,
+	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("sync called")
-		ps, err := localClient.Task.GetPlugins()
-		CheckErr(err)
+		ps, err := poetC.Task.GetPlugins()
+		checkErr(err)
 		for name, c := range ps {
 			log.Printf("%+v %+v\n", name, c)
 			p := c()
-			err := localClient.Task.SyncPlugin(p)
-			CheckErr(err)
+			err := poetC.Task.SyncPlugin(p)
+			checkErr(err)
 		}
 	},
 }

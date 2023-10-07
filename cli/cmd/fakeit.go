@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"log"
 	"math/rand"
 	"reflect"
 	"time"
+
+	"github.com/charmbracelet/log"
 
 	"github.com/bxcodec/faker"
 	"github.com/drewstinnett/taskpoet/taskpoet"
@@ -19,38 +20,35 @@ var fakeitCmd = &cobra.Command{
 	Long:   `Generate a bunch of fake tasks. Mainly used for testing, load, boring stuff like that`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var ts []taskpoet.Task
-		log.Println("Generating TODO tasks")
+		log.Info("Generating TODO tasks")
 		for i := 0; i < 100; i++ {
 			desc, err := faker.GetLorem().Sentence(reflect.Value{})
-			CheckErr(err)
+			checkErr(err)
 
 			t := taskpoet.Task{
-				//Description: fmt.Sprintf("Task number %v", i),
+				// Description: fmt.Sprintf("Task number %v", i),
 				Description: desc.(string),
 				Due:         randomDueDate(),
 				Added:       randomAddedDate(),
 			}
 			ts = append(ts, t)
 		}
-		err := localClient.Task.AddSet(ts, nil)
-		CheckErr(err)
+		checkErr(poetC.Task.AddSet(ts))
 
-		log.Println("Generating completed tasks")
+		log.Info("Generating completed tasks")
 		var tsl []taskpoet.Task
 		for i := 0; i < 100; i++ {
-			desc, err := faker.GetLorem().Sentence(reflect.Value{})
-			CheckErr(err)
+			desc, serr := faker.GetLorem().Sentence(reflect.Value{})
+			checkErr(serr)
 
-			t := taskpoet.Task{
-				//Description: fmt.Sprintf("Task number %v", i),
+			tsl = append(tsl, taskpoet.Task{
+				// Description: fmt.Sprintf("Task number %v", i),
 				Description: desc.(string),
 				Added:       randomAddedDate(),
 				Completed:   randomCompletedDate(),
-			}
-			tsl = append(tsl, t)
+			})
 		}
-		err = localClient.Task.AddSet(tsl, nil)
-		CheckErr(err)
+		checkErr(poetC.Task.AddSet(tsl))
 	},
 }
 
@@ -69,13 +67,13 @@ func init() {
 }
 
 func randomDueDate() *time.Time {
-	//min := time.Date(1970, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
+	// min := time.Date(1970, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
 	now := time.Now()
 	min := now.Unix()
 	max := time.Date(2070, 1, 0, 0, 0, 0, 0, time.UTC).Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	r := time.Unix(sec, 0)
 	return &r
 }
@@ -85,7 +83,7 @@ func randomAddedDate() time.Time {
 	max := time.Now().Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	return time.Unix(sec, 0)
 }
 
@@ -94,7 +92,7 @@ func randomCompletedDate() *time.Time {
 	max := time.Now().Unix()
 	delta := max - min
 
-	sec := rand.Int63n(delta) + min
+	sec := rand.Int63n(delta) + min // nolint:gosec
 	r := time.Unix(sec, 0)
 	return &r
 }

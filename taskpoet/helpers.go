@@ -4,21 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
-
-func MakeDirectory(dirPath string) error {
-	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-		log.Warning("Creating directory: ", dirPath)
-		err := os.MkdirAll(dirPath, 0755)
-		return err
-	}
-	return nil
-}
 
 // Copied from: https://gist.github.com/xhit/79c9e137e1cfe332076cdda9f5e24699
 var unitMap = map[string]int64{
@@ -35,12 +23,21 @@ var unitMap = map[string]int64{
 	"M":  int64(time.Hour) * 720,
 }
 
+// MustParseDuration parses a duration or panics
+func MustParseDuration(s string) time.Duration {
+	got, err := ParseDuration(s)
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
 // ParseDuration parses a duration string.
 // A duration string is a possibly signed sequence of
 // decimal numbers, each with optional fraction and a unit suffix,
 // such as "300ms", "-1.5h" or "2h45m".
 // Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h", "d", "w".
-func ParseDuration(s string) (time.Duration, error) {
+func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 	// [-+]?([0-9]*(\.[0-9]*)?[a-z]+)+
 	orig := s
 	var d int64
@@ -196,7 +193,7 @@ func leadingFraction(s string) (x int64, scale float64, rem string) {
 	return x, scale, s[i:]
 }
 
-func HumanizeDuration(duration time.Duration) string {
+func humanizeDuration(duration time.Duration) string {
 	days := int64(duration.Hours() / 24)
 	hours := int64(math.Mod(duration.Hours(), 24))
 	minutes := int64(math.Mod(duration.Minutes(), 60))
@@ -228,16 +225,13 @@ func HumanizeDuration(duration time.Duration) string {
 	return strings.Join(parts, " ")
 }
 
+// CheckUniqueStringSlice checks if this is a unique thing
 func CheckUniqueStringSlice(target []string) bool {
-	uniqueSlice := FilterUniqueStrings(target)
-	if len(uniqueSlice) != len(target) {
-		return false
-	} else {
-		return true
-	}
+	uniqueSlice := filterUniqueStrings(target)
+	return len(uniqueSlice) == len(target)
 }
 
-func FilterUniqueStrings(target []string) []string {
+func filterUniqueStrings(target []string) []string {
 	uniqueMap := make(map[string]bool)
 	var uniqueNames []string
 
@@ -250,7 +244,8 @@ func FilterUniqueStrings(target []string) []string {
 	return uniqueNames
 }
 
-func ContainsString(s []string, str string) bool {
+// containsString checks if a string is contained in an array
+func containsString(s []string, str string) bool {
 	for _, v := range s {
 		if v == str {
 			return true
@@ -258,4 +253,9 @@ func ContainsString(s []string, str string) bool {
 	}
 
 	return false
+}
+
+func nowPTR() *time.Time {
+	t := time.Now()
+	return &t
 }

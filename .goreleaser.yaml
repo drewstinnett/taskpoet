@@ -29,6 +29,8 @@ builds:
 archives:
   - format: tar.gz
     name_template: 'taskpoet-{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - completions/*
 checksum:
   name_template: 'taskpoet-{{ .Version }}_SHA256SUMS'
   algorithm: sha256

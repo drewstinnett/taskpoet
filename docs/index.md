@@ -9,7 +9,6 @@ TaskPoet is a [TaskWarrior](https://taskwarrior.org/) inspired task manager. We
 aim to be easy to use from the CLI, but also pretty, focusing on TUI elements
 from the amazing [Charm.sh](https://charm.sh/) folks.
 
-
 Key reasons why this exists:
 
 * Focus on aesthetics, even though this is a CLI app.

@@ -17,6 +17,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/drewstinnett/taskpoet/themes"
 	"github.com/mitchellh/go-homedir"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/term"
@@ -91,6 +92,13 @@ type DBConfig struct {
 }
 */
 
+// WithStyling gives the poet a certain style at create
+func WithStyling(s themes.Styling) Option {
+	return success(func(p *Poet) {
+		p.styling = s
+	})
+}
+
 // WithDatabasePath gives the Poet a path to a database file
 func WithDatabasePath(s string) Option {
 	if s != "" {
@@ -127,6 +135,7 @@ type Poet struct {
 	dbPath         string
 	RecurringTasks RecurringTasks
 	bucket         []byte
+	styling        themes.Styling
 }
 
 // initDB initializes the database
@@ -171,19 +180,16 @@ const (
 	LG int = 10
 )
 
-var (
-	docStyle  = lipgloss.NewStyle().Padding(0, 2, 0, 2)
-	subtle    = lipgloss.AdaptiveColor{Light: "#f3f4f0", Dark: "#383838"}
-	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-
+var docStyle = lipgloss.NewStyle().Padding(0, 2, 0, 2) // subtle    = lipgloss.AdaptiveColor{Light: "#f3f4f0", Dark: "#383838"}
+// highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+// special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+/*
 	header = lipgloss.NewStyle().
 		Foreground(highlight).
 		Underline(true).
 		Padding(0, 1, 0, 1)
-	entry    = lipgloss.NewStyle().Foreground(special).Padding(0, 1, 0, 1)
-	entryAlt = lipgloss.NewStyle().Foreground(special).Background(subtle).Padding(0, 1, 0, 1)
-)
+*/ // entry    = lipgloss.NewStyle().Foreground(special).Padding(0, 1, 0, 1)
+// entryAlt = lipgloss.NewStyle().Foreground(special).Background(subtle).Padding(0, 1, 0, 1)
 
 // TableOpts defines the data displayed in a table
 type TableOpts struct {
@@ -254,12 +260,12 @@ func getTaskColumn(name string, d []Task) (taskColumn, error) {
 	}
 }
 
-func iterateColumnHeaders(c []string, d []Task) []string {
+func iterateColumnHeaders(c []string, d []Task, s lipgloss.Style) []string {
 	ret := make([]string, len(c))
 	for idx, item := range c {
 		cl, err := getTaskColumn(item, d)
 		panicIfErr(err)
-		ret[idx] = header.Width(cl.Width()).Render(item)
+		ret[idx] = s.Width(cl.Width()).Render(item)
 	}
 	return ret
 }
@@ -307,14 +313,14 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 
 	row := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		iterateColumnHeaders(columns, tasks)...,
+		iterateColumnHeaders(columns, tasks, p.styling.RowHeader)...,
 	)
 	headerLen := lipgloss.Width(row)
 	doc := strings.Builder{}
 	doc.WriteString(row + "\n")
 
 	for idx, task := range tasks {
-		rs := altRowStyle(idx, entry, entryAlt)
+		rs := altRowStyle(idx, p.styling.Row, p.styling.RowAlt)
 		row := lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			iterateColumnValues(columns, task, tasks, rs)...,

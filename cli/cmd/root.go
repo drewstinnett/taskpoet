@@ -13,6 +13,8 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/drewstinnett/taskpoet/themes"
+	"github.com/drewstinnett/taskpoet/themes/solarized"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -124,7 +126,11 @@ func initConfig() {
 	if cerr := viper.ReadInConfig(); cerr == nil {
 		log.Debug("Using config file", "file", viper.ConfigFileUsed())
 	}
-	poetC, err = taskpoet.New(taskpoet.WithDatabasePath(viper.GetString("dbpath")), taskpoet.WithNamespace(namespace))
+	poetC, err = taskpoet.New(
+		taskpoet.WithDatabasePath(viper.GetString("dbpath")),
+		taskpoet.WithNamespace(namespace),
+		taskpoet.WithStyling(getTheme(viper.GetString("theme"))),
+	)
 	checkErr(err)
 
 	// Declare defaults
@@ -233,4 +239,18 @@ func tableOptsWithCmd(cmd *cobra.Command, args []string) (*taskpoet.TableOpts, e
 
 func bindTableOpts(cmd *cobra.Command) {
 	cmd.PersistentFlags().IntP("limit", "l", 40, "Limit to N results")
+}
+
+// themeMap maps a string to Theme generators
+var themeMap map[string]func() themes.Styling = map[string]func() themes.Styling{
+	"default":         themes.New,
+	"solarized-light": solarized.NewLight,
+	"solarized-dark":  solarized.NewDark,
+}
+
+func getTheme(n string) themes.Styling {
+	if t, ok := themeMap[n]; ok {
+		return t()
+	}
+	return themes.New()
 }

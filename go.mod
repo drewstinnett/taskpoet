@@ -7,7 +7,7 @@ require (
 	github.com/bxcodec/faker v2.0.1+incompatible
 	github.com/charmbracelet/bubbles v0.16.1
 	github.com/charmbracelet/bubbletea v0.24.2
-	github.com/charmbracelet/lipgloss v0.8.0
+	github.com/charmbracelet/lipgloss v0.9.0
 	github.com/charmbracelet/log v0.2.5
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gin-contrib/cors v1.4.0

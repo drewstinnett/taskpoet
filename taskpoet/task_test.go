@@ -625,11 +625,11 @@ func TestTaskTable(t *testing.T) {
 
 	table := p.TaskTable(TableOpts{
 		Prefix:  "/active",
-		Columns: []string{"Description"},
+		Columns: []string{"ID", "Description"},
 	})
 	require.Contains(
 		t,
-		fmt.Sprint(strings.TrimSpace(table)),
+		table,
 		"draw a table and test it",
 	)
 }

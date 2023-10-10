@@ -50,9 +50,9 @@ var lightColors colors = colors{
 // NewLight returns a new light theme solarized styler
 func NewLight() themes.Styling {
 	return themes.Styling{
+		RowHeader: lipgloss.NewStyle().Foreground(lightColors.Accent0).Underline(true).Padding(0, 1, 0, 1),
 		Row:       lipgloss.NewStyle().Foreground(lightColors.Base0).Background(lightColors.Base3).Padding(0, 1, 0, 1),
 		RowAlt:    lipgloss.NewStyle().Foreground(lightColors.Base0).Background(lightColors.Base2).Padding(0, 1, 0, 1),
-		RowHeader: lipgloss.NewStyle().Foreground(lightColors.Accent0).Underline(true).Padding(0, 1, 0, 1),
 	}
 }
 

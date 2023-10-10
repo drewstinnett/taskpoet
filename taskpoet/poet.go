@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/themes"
 	"github.com/mitchellh/go-homedir"
@@ -181,15 +182,6 @@ const (
 )
 
 var docStyle = lipgloss.NewStyle().Padding(0, 2, 0, 2) // subtle    = lipgloss.AdaptiveColor{Light: "#f3f4f0", Dark: "#383838"}
-// highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-// special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-/*
-	header = lipgloss.NewStyle().
-		Foreground(highlight).
-		Underline(true).
-		Padding(0, 1, 0, 1)
-*/ // entry    = lipgloss.NewStyle().Foreground(special).Padding(0, 1, 0, 1)
-// entryAlt = lipgloss.NewStyle().Foreground(special).Background(subtle).Padding(0, 1, 0, 1)
 
 // TableOpts defines the data displayed in a table
 type TableOpts struct {
@@ -241,54 +233,6 @@ func mustColumnValue(s string, t Task) string {
 	return got
 }
 
-func getTaskColumn(name string, d []Task) (taskColumn, error) {
-	switch name {
-	case "ID":
-		return &shortIDCol{}, nil
-	case "Age":
-		return &ageCol{}, nil
-	case "Due":
-		return &dueCol{}, nil
-	case descriptionColumnName:
-		return &descriptionCol{tasks: d}, nil
-	case "Completed":
-		return &completedCol{}, nil
-	case "Tags":
-		return &tagsCol{tasks: d}, nil
-	default:
-		return nil, fmt.Errorf("unknown columnn: %v", name)
-	}
-}
-
-func iterateColumnHeaders(c []string, d []Task, s lipgloss.Style) []string {
-	ret := make([]string, len(c))
-	for idx, item := range c {
-		cl, err := getTaskColumn(item, d)
-		panicIfErr(err)
-		ret[idx] = s.Width(cl.Width()).Render(item)
-	}
-	return ret
-}
-
-func iterateColumnValues(c []string, t Task, d []Task, s lipgloss.Style) []string {
-	ret := make([]string, len(c))
-	for idx, item := range c {
-		// ret[idx] = s.Width(mustColumnSize(item)).Render(mustColumnValue(item, t))
-		cl, err := getTaskColumn(item, d)
-		panicIfErr(err)
-		ret[idx] = s.Width(cl.Width()).Render(mustColumnValue(item, t))
-	}
-	return ret
-}
-
-func columnsOrDefault(c []string) []string {
-	defaultColumns := []string{"ID", "Age", "Description", "Due", "Tags"}
-	if len(c) == 0 {
-		return defaultColumns
-	}
-	return c
-}
-
 // TaskTable returns a table of the given tasks
 // func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
 func (p *Poet) TaskTable(opts TableOpts) string {
@@ -309,53 +253,57 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 		tasks = tasks[0:min(len(tasks), opts.FilterParams.Limit)]
 	}
 
-	columns := columnsOrDefault(opts.Columns)
-
-	row := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		iterateColumnHeaders(columns, tasks, p.styling.RowHeader)...,
-	)
-	headerLen := lipgloss.Width(row)
-	doc := strings.Builder{}
-	doc.WriteString(row + "\n")
-
-	for idx, task := range tasks {
-		rs := altRowStyle(idx, p.styling.Row, p.styling.RowAlt)
-		row := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			iterateColumnValues(columns, task, tasks, rs)...,
-		)
-		doc.WriteString(row + "\n")
+	// columns := columnsOrDefault(opts.Columns)
+	columns := make([]any, len(opts.Columns))
+	for idx, c := range opts.Columns {
+		columns[idx] = c
 	}
-	addLimitWarning(&doc, headerLen-4, opts.FilterParams.Limit, allTasksLen)
+
+	doc := strings.Builder{}
+
+	t := table.New().
+		Border(lipgloss.HiddenBorder()).
+		BorderStyle(lipgloss.NewStyle()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			switch {
+			case row == 0:
+				return p.styling.RowHeader
+			case row%2 == 0:
+				return p.styling.RowAlt
+			default:
+				return p.styling.Row
+			}
+		}).
+		Headers(columns...)
+
+	for _, task := range tasks {
+		row := make([]string, len(opts.Columns))
+		for idx, c := range opts.Columns {
+			row[idx] = mustColumnValue(c, task)
+		}
+		t.Row(row...)
+	}
+	doc.WriteString(t.Render())
+
+	width := lipgloss.Width(t.Render())
+	addLimitWarning(&doc, width-4, opts.FilterParams.Limit, allTasksLen)
 
 	w, _, _ := term.GetSize(int(os.Stdout.Fd()))
-	maxW := max(w, headerLen)
-	log.Debug("setting max window size", "size", maxW)
+	maxW := min(w, width)
+	// log.Debug("setting max window size", "size", maxW)
 	docStyle = docStyle.MaxWidth(maxW)
 	return docStyle.Render(doc.String())
 }
 
 func addLimitWarning(doc io.StringWriter, width, limit, total int) {
 	if (limit > 0) && limit < total {
+		_, _ = doc.WriteString("\n")
 		_, _ = doc.WriteString(
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Right).Italic(true).Render(
+			lipgloss.NewStyle().Italic(true).Width(width - 3).Align(lipgloss.Right).Render(
 				fmt.Sprintf("* %v more records to display, increase the limit to see it",
 					total-limit)),
 		)
 	}
-}
-
-func longestDescription(tasks Tasks) int {
-	// Description is 11 chars long itself, add 2 for padding
-	r := 13
-	for _, task := range tasks {
-		l := len(task.Description)
-		if l > r {
-			r = l
-		}
-	}
-	return r
 }
 
 // Filter is a filter function applied to a single task
@@ -411,13 +359,6 @@ func ApplyFilters(tasks Tasks, p *FilterParams, filters ...Filter) Tasks {
 	return filteredRecords
 }
 
-func altRowStyle(idx int, even, odd lipgloss.Style) lipgloss.Style {
-	if idx%2 == 0 {
-		return even
-	}
-	return odd
-}
-
 // ByDue is the by due date sorter
 type ByDue Tasks
 
@@ -447,47 +388,6 @@ func (a ByCompleted) Less(i, j int) bool {
 	return a[j].Completed.Before(*a[i].Completed)
 }
 func (a ByCompleted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-
-type taskColumn interface {
-	String() string
-	Width() int
-}
-
-type shortIDCol struct{}
-
-func (c shortIDCol) String() string { return "ID" }
-func (c shortIDCol) Width() int     { return 8 }
-
-type ageCol struct {
-	name string
-}
-
-func (a ageCol) String() string { return a.name }
-func (a ageCol) Width() int     { return 15 }
-
-type dueCol struct{}
-
-func (d dueCol) String() string { return "Due" }
-func (d dueCol) Width() int     { return 15 }
-
-type descriptionCol struct {
-	tasks Tasks
-}
-
-func (d descriptionCol) String() string { return descriptionColumnName }
-func (d descriptionCol) Width() int     { return min(55, longestDescription(d.tasks)+3) }
-
-type tagsCol struct {
-	tasks Tasks
-}
-
-func (t tagsCol) String() string { return "Tags" }
-func (t tagsCol) Width() int     { return 15 }
-
-type completedCol struct{}
-
-func (d completedCol) String() string { return "Completed" }
-func (d completedCol) Width() int     { return 13 }
 
 func (p *Poet) exists(t *Task) bool {
 	_, err := p.Task.GetWithID(t.ID, t.PluginID, "")

@@ -44,3 +44,31 @@ func TestDurtionErrors(t *testing.T) {
 		require.EqualError(t, errors.New(expect), err.Error())
 	}
 }
+
+func TestNewCalendar(t *testing.T) {
+	now := time.Now()
+	got := NewCalendar(WithPresent(&now))
+	require.NotNil(t, got)
+}
+
+func TestCalendarSynonyms(t *testing.T) {
+	present := time.Date(1978, 7, 16, 8, 0, 0, 42, time.Local)
+	cal := NewCalendar(WithPresent(&present))
+	tests := map[string]time.Time{
+		"now":       time.Date(1978, 7, 16, 8, 0, 0, 42, time.Local),
+		"today":     time.Date(1978, 7, 16, 0, 0, 0, 0, time.Local),
+		"tomorrow":  time.Date(1978, 7, 17, 0, 0, 0, 0, time.Local),
+		"yesterday": time.Date(1978, 7, 15, 0, 0, 0, 0, time.Local),
+		"eod":       time.Date(1978, 7, 16, 23, 59, 59, 999, time.Local),
+	}
+	for given, expect := range tests {
+		got, err := cal.Synonym(given)
+		require.NoError(t, err)
+		require.Equal(t, expect, *got)
+	}
+
+	got, err := cal.Synonym("never-exists")
+	require.Nil(t, got)
+	require.Error(t, err)
+	require.EqualError(t, err, "unknown synonym: never-exists")
+}

@@ -41,6 +41,8 @@ func setup() {
 
 	// Init Router
 	router = NewRouter(&RouterConfig{LocalClient: lc})
+
+	os.Setenv("TZ", "America/New_York")
 }
 
 func shutdown() {

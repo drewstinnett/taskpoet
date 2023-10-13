@@ -253,12 +253,6 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 		tasks = tasks[0:min(len(tasks), opts.FilterParams.Limit)]
 	}
 
-	// columns := columnsOrDefault(opts.Columns)
-	columns := make([]any, len(opts.Columns))
-	for idx, c := range opts.Columns {
-		columns[idx] = c
-	}
-
 	doc := strings.Builder{}
 
 	t := table.New().
@@ -274,7 +268,7 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 				return p.styling.Row
 			}
 		}).
-		Headers(columns...)
+		Headers(opts.Columns...)
 
 	for _, task := range tasks {
 		row := make([]string, len(opts.Columns))

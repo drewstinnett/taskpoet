@@ -9,6 +9,8 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      TZ: "America/New_York"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4

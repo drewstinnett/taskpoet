@@ -12,6 +12,8 @@ on:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    env:
+      TZ: "America/New_York"
     steps:
       -
         name: Checkout

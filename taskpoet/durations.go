@@ -132,11 +132,11 @@ func (c Calendar) calcMonth(twm time.Month) time.Time {
 	cwm := c.present.Month()
 	switch {
 	case twm == cwm:
-		return floorDay(c.present.AddDate(0, 12, 0))
+		return floorMonth(floorDay(c.present.AddDate(0, 12, 0)))
 	case twm < cwm:
-		return floorDay(c.present.AddDate(0, int((12-cwm)+twm), 0))
+		return floorMonth(floorDay(c.present.AddDate(0, int((12-cwm)+twm), 0)))
 	default:
-		return floorDay(c.present.AddDate(0, int(twm-cwm), 0))
+		return floorMonth(floorDay(c.present.AddDate(0, int(twm-cwm), 0)))
 	}
 }
 
@@ -148,6 +148,11 @@ func ceilDay(t time.Time) time.Time {
 func floorDay(t time.Time) time.Time {
 	year, month, day := t.Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
+}
+
+func floorMonth(t time.Time) time.Time {
+	year, month, _ := t.Date()
+	return time.Date(year, month, 1, 0, 0, 0, 0, t.Location())
 }
 
 // NewCalendar returns a new calendar object

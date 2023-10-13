@@ -156,8 +156,8 @@ var (
 	TwentySeventh Synonym = "27th" // nolint
 	TwentyEith    Synonym = "28th" // nolint
 	TwentyNinth   Synonym = "29th" // nolint
-	Thrityith     Synonym = "30th" // nolint
-	ThrityFirst   Synonym = "31th" // nolint
+	Thirtyith     Synonym = "30th" // nolint
+	ThirtyFirst   Synonym = "31st" // nolint
 
 	January   Synonym = "january"   // nolint
 	February  Synonym = "februrary" // nolint
@@ -241,8 +241,8 @@ var simpleSynonymMap = map[Synonym]synonymer{
 	TwentySeventh: func(c *time.Time) time.Time { return nthDay(27, *c) },
 	TwentyEith:    func(c *time.Time) time.Time { return nthDay(28, *c) },
 	TwentyNinth:   func(c *time.Time) time.Time { return nthDay(29, *c) },
-	Thrityith:     func(c *time.Time) time.Time { return nthDay(30, *c) },
-	ThrityFirst:   func(c *time.Time) time.Time { return nthDay(31, *c) },
+	Thirtyith:     func(c *time.Time) time.Time { return nthDay(30, *c) },
+	ThirtyFirst:   func(c *time.Time) time.Time { return nthDay(31, *c) },
 }
 
 func nthDay(d int, c time.Time) time.Time {

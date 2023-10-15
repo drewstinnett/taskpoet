@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -38,11 +39,15 @@ func TestNew(t *testing.T) {
 
 func TestActiveTable(t *testing.T) {
 	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
+	tomorrow := time.Now().AddDate(0, 0, 1)
 	p, err := New(WithDatabasePath(tmpfile.Name()))
 	require.NoError(t, err)
 	_, err = p.Task.Add(&Task{Description: "foo"})
 	require.NoError(t, err)
-	_, err = p.Task.Add(&Task{Description: "bar"})
+	_, err = p.Task.Add(&Task{
+		Description: "bar",
+		Due:         &tomorrow,
+	})
 	require.NoError(t, err)
 	thing := p.TaskTable(TableOpts{Prefix: "/active"})
 	fmt.Fprintf(os.Stderr, "TABLE: %+v\n", thing)

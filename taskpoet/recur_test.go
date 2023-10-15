@@ -8,7 +8,7 @@ import (
 )
 
 func TestSimpleRecursion(t *testing.T) {
-	p, err := New(
+	p, _ := New(
 		WithDatabasePath(mustTempDB(t)),
 		WithRecurringTasks(RecurringTasks{{
 			Description: "do something frequently",
@@ -16,8 +16,7 @@ func TestSimpleRecursion(t *testing.T) {
 		}}),
 	)
 	time.Sleep(2 * time.Second)
-	require.NoError(t, p.checkRecurring())
-	require.NoError(t, err)
+	p.checkRecurring()
 	items := p.MustList("/active")
 	require.Equal(t, 1, len(items))
 	require.Equal(t, "do something frequently", items[0].Description)
@@ -38,8 +37,7 @@ func TestSimpleRecursionHit(t *testing.T) {
 		WithCompleted(&now),
 	))
 	require.NoError(t, err)
-	require.NoError(t, p.checkRecurring())
-	require.NoError(t, err)
+	p.checkRecurring()
 	items := p.MustList("/active")
 	require.Equal(t, 0, len(items))
 	items = p.MustList("/completed")

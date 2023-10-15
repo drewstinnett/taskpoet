@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ type Task struct {
 	Tags         []string     `json:"tags,omitempty"`
 	Comments     []Comment    `json:"comments,omitempty"`
 	Project      string       `json:"project,omitempty"`
+	Urgency      float64      `json:"urgency:omitempty"`
 }
 
 // Comment is just a little comment/note on a task
@@ -50,8 +52,40 @@ func (t Task) DueString() string {
 	return ""
 }
 
+// Urgency is an attempt at creating an urgency algorhthm similar to TaskWarrior
+// for tasks
+/*
+func (t *Task) Urgency() float64 {
+	// Did we already run this?
+	if t.urgency != nil {
+		return *t.urgency
+	}
+	u := float64(0)
+	if (t.Due != nil) && time.Now().After(*t.Due) {
+		u = 1
+	}
+	// Lazy cache
+	t.urgency = &u
+	return u
+}
+*/
+
 // Tasks represents multiple Task items
-type Tasks []Task
+type Tasks []*Task
+
+// SortBy specifies how to sort the tasks
+func (t *Tasks) SortBy(s any) {
+	switch s.(type) {
+	case ByDue:
+		sort.Sort(ByDue(*t))
+	case ByCompleted:
+		sort.Sort(ByCompleted(*t))
+	case ByUrgency:
+		sort.Sort(ByUrgency(*t))
+	default:
+		sort.Sort(*t)
+	}
+}
 
 // Len helps to satisfy the sort interface
 func (t Tasks) Len() int {
@@ -116,7 +150,7 @@ func (t *Task) ShortID() string {
 type TaskService interface {
 	// This should replace New, and Log
 	Add(t *Task) (*Task, error)
-	AddSet(t []Task) error
+	AddSet(t Tasks) error
 
 	// BucketName() string
 
@@ -235,12 +269,13 @@ func (svc *TaskServiceOp) AddChild(p, c *Task) error {
 
 // AddOrEditSet adds or edits a set of tasks
 func (svc *TaskServiceOp) AddOrEditSet(tasks []Task) error {
-	var addSet []Task
+	var addSet Tasks
 	var editSet []Task
 	for _, t := range tasks {
+		t := t
 		_, err := svc.GetWithExactPath(t.DetectKeyPath())
 		if err != nil {
-			addSet = append(addSet, t)
+			addSet = append(addSet, &t)
 		} else {
 			editSet = append(editSet, t)
 		}
@@ -537,7 +572,7 @@ func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
 				return err
 			}
 			if strings.HasPrefix(string(k), prefix) {
-				tasks = append(tasks, task)
+				tasks = append(tasks, &task)
 			}
 			return nil
 		}); err != nil {
@@ -560,10 +595,10 @@ func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 }
 
 // AddSet adds a task set
-func (svc *TaskServiceOp) AddSet(t []Task) error {
+func (svc *TaskServiceOp) AddSet(t Tasks) error {
 	for _, task := range t {
 		task := task
-		if _, err := svc.Add(&task); err != nil {
+		if _, err := svc.Add(task); err != nil {
 			return err
 		}
 	}
@@ -574,6 +609,9 @@ func (svc *TaskServiceOp) AddSet(t []Task) error {
 func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	// t is the new task
 	t.setDefaults(&svc.localClient.Default)
+
+	// Assign a weight/urgency
+	t.Urgency = svc.localClient.curator.Weigh(*t)
 
 	// Does this already exist??
 	if svc.localClient.exists(t) {
@@ -710,6 +748,13 @@ func WithDue(d *time.Time) TaskOption {
 func WithCompleted(d *time.Time) TaskOption {
 	return func(t *Task) {
 		t.Completed = d
+	}
+}
+
+// WithAdded sets the added date on create
+func WithAdded(d *time.Time) TaskOption {
+	return func(t *Task) {
+		t.Added = *d
 	}
 }
 

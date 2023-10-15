@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/go-playground/assert/v2"
+	"github.com/stretchr/testify/require"
 )
 
 func TestActiveRoute(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{
 			ID:          "test-active",
 			Description: "foo",
@@ -22,21 +23,14 @@ func TestActiveRoute(t *testing.T) {
 			Description: "foo",
 		},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v1/tasks?limit=1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, 200, w.Code)
 	var apir APITaskResponse
-	// var tasks []Task
-	err = json.Unmarshal(w.Body.Bytes(), &apir)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &apir))
 	assert.Equal(t, apir.Data[0].Description, "foo")
 	assert.Equal(t, apir.Pagination.HasMore, true)
 
@@ -44,16 +38,13 @@ func TestActiveRoute(t *testing.T) {
 	req, _ = http.NewRequest("GET", "/v1/tasks?limit=100", nil)
 	router.ServeHTTP(w, req)
 
-	err = json.Unmarshal(w.Body.Bytes(), &apir)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &apir))
 	assert.Equal(t, apir.Pagination.HasMore, false)
 }
 
 func TestCompleted(t *testing.T) {
 	now := time.Now()
-	ts := []Task{
+	ts := Tasks{
 		{
 			ID:          "test-completed",
 			Description: "foo-completed",
@@ -65,10 +56,7 @@ func TestCompleted(t *testing.T) {
 			Completed:   &now,
 		},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v1/tasks?limit=1&include_completed=true&include_active=false", nil)
 	router.ServeHTTP(w, req)
@@ -76,10 +64,7 @@ func TestCompleted(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 	var apir APITaskResponse
 	// var tasks []Task
-	err = json.Unmarshal(w.Body.Bytes(), &apir)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &apir))
 	assert.Equal(t, apir.Data[0].Description, "foo-completed")
 	assert.Equal(t, apir.Pagination.HasMore, true)
 }
@@ -117,29 +102,14 @@ func TestAddTask(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 }
 
-/*
-func TestAddInvalidTask(t *testing.T) {
-	// Make sure include_completed not set to bool errors
-	task := Task{}
-	taskB, _ := json.Marshal(task)
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(taskB))
-	router.ServeHTTP(w, req)
-	assert.Equal(t, 500, w.Code)
-}
-*/
-
 func TestGetTask(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{
 			ID:          "test",
 			Description: "foo",
 		},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/v1/tasks/test", nil)
 	router.ServeHTTP(w, req)
@@ -153,16 +123,13 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestEditTask(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{
 			ID:          "test-edit",
 			Description: "orig",
 		},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 
 	edit := Task{
 		ID:          "test-edit",
@@ -186,21 +153,16 @@ func TestEditTask(t *testing.T) {
 }
 
 func TestDeleteTest(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{
 			ID:          "test-delete",
 			Description: "orig",
 		},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 
 	taskB, err := json.Marshal(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	// Make sure delete succeeds
 	w := httptest.NewRecorder()

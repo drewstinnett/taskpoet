@@ -10,6 +10,7 @@ import (
 
 // parseDuration parses a duration string in a way very similar to TaskWarrior,
 // documented here: https://taskwarrior.org/docs/durations/
+// This needs to be converted to a calendar subroutine
 func parseDuration(s string) (*time.Duration, error) {
 	if s == "" {
 		return nil, errors.New("duration must not be an empty string")
@@ -66,6 +67,36 @@ type Calendar struct {
 	present time.Time
 }
 
+// ShortDuration returns as short of a duration as we feel comfortable doing.
+// Like...2h, 3y, 4w, etc
+// func (c Calendar) ShortDuration(d time.Duration) string {
+func shortDuration(d time.Duration) string {
+	prefix := ""
+	if d < 0 {
+		d *= -1
+		prefix = "-"
+	}
+	var dur string
+	switch {
+	// Hours
+	case d < 24*time.Hour:
+		dur = fmt.Sprintf("%vh", int(d.Hours()))
+	// Days
+	case d < 7*24*time.Hour:
+		dur = fmt.Sprintf("%vd", int(d.Hours())/24)
+	// Weeks
+	case d < 7*24*30*time.Hour:
+		dur = fmt.Sprintf("%vw", int(d.Hours())/7/24)
+	// Months
+	case d < 7*24*30*12*time.Hour:
+		dur = fmt.Sprintf("%vM", int(d.Hours())/30/7/28)
+	// Years
+	default:
+		dur = fmt.Sprintf("%vy", int(d.Hours())/30/7/24/365)
+	}
+	return fmt.Sprintf("%v%v", prefix, dur)
+}
+
 // WithPresent sets the present time to an arbitrary datetime
 func WithPresent(t *time.Time) func(*Calendar) {
 	return func(c *Calendar) {
@@ -92,11 +123,18 @@ func datePTR(t time.Time) *time.Time {
 func (c Calendar) Date(s string) (*time.Time, error) {
 	syn, err := c.Synonym(s)
 	if err != nil {
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return nil, err
+		// Is this a taskwarrior duration?
+		if twd, derr := parseDuration(s); derr == nil {
+			return datePTR(c.present.Add(*twd)), nil
 		}
-		return datePTR(c.present.Add(d)), nil
+		// Is this a normal-ish duration?
+
+		var pderr error
+		var d time.Duration
+		if d, pderr = time.ParseDuration(s); pderr == nil {
+			return datePTR(c.present.Add(d)), nil
+		}
+		return nil, pderr
 	}
 	return &syn, nil
 }
@@ -112,21 +150,6 @@ func (c Calendar) calcDay(twd time.Weekday) time.Time {
 		return floorDay(c.present.Add(time.Duration((twd-cwd)*24) * time.Hour))
 	}
 }
-
-/*
-func calcMonth(s string, c Calendar) time.Time {
-	twm := getMonthOfYear(s)
-	cwm := c.present.Month()
-	switch {
-	case twm == cwm:
-		return floorDay(c.present.AddDate(0, 12, 0))
-	case twm < cwm:
-		return floorDay(c.present.AddDate(0, int((12-cwm)+twm), 0))
-	default:
-		return floorDay(c.present.AddDate(0, int(twm-cwm), 0))
-	}
-}
-*/
 
 func (c Calendar) calcMonth(twm time.Month) time.Time {
 	cwm := c.present.Month()

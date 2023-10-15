@@ -19,7 +19,7 @@ var fakeitCmd = &cobra.Command{
 	Short:  "Generate a bunch of fake tasks",
 	Long:   `Generate a bunch of fake tasks. Mainly used for testing, load, boring stuff like that`,
 	Run: func(cmd *cobra.Command, args []string) {
-		var ts []taskpoet.Task
+		var ts taskpoet.Tasks
 		log.Info("Generating TODO tasks")
 		for i := 0; i < 100; i++ {
 			desc, err := faker.GetLorem().Sentence(reflect.Value{})
@@ -31,22 +31,22 @@ var fakeitCmd = &cobra.Command{
 				Due:         randomDueDate(),
 				Added:       randomAddedDate(),
 			}
-			ts = append(ts, t)
+			ts = append(ts, &t)
 		}
 		checkErr(poetC.Task.AddSet(ts))
 
 		log.Info("Generating completed tasks")
-		var tsl []taskpoet.Task
+		var tsl taskpoet.Tasks
 		for i := 0; i < 100; i++ {
 			desc, serr := faker.GetLorem().Sentence(reflect.Value{})
 			checkErr(serr)
 
-			tsl = append(tsl, taskpoet.Task{
-				// Description: fmt.Sprintf("Task number %v", i),
-				Description: desc.(string),
-				Added:       randomAddedDate(),
-				Completed:   randomCompletedDate(),
-			})
+			rad := randomAddedDate()
+			tsl = append(tsl, taskpoet.MustNewTask(
+				taskpoet.WithDescription(desc.(string)),
+				taskpoet.WithAdded(&rad),
+				taskpoet.WithCompleted(randomCompletedDate()),
+			))
 		}
 		checkErr(poetC.Task.AddSet(tsl))
 	},

@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -53,6 +52,7 @@ func New(options ...Option) (*Poet, error) {
 	p := &Poet{
 		Namespace: "default",
 		dbPath:    path.Join(mustHomeDir(), ".taskpoet.db"),
+		curator:   NewCurator(),
 	}
 	// Default to homedir database
 	for _, option := range options {
@@ -137,6 +137,17 @@ type Poet struct {
 	RecurringTasks RecurringTasks
 	bucket         []byte
 	styling        themes.Styling
+	curator        *Curator
+}
+
+func (p Poet) refresh(ts Tasks) {
+	for _, task := range ts {
+		newW := p.curator.Weigh(*task)
+		if task.Urgency != newW {
+			log.Debug("Updating urgency", "from", task.Urgency, "to", newW, "task", task.Description)
+			task.Urgency = newW
+		}
+	}
 }
 
 // initDB initializes the database
@@ -204,11 +215,20 @@ func (p Poet) MustList(s string) Tasks {
 const descriptionColumnName = "Description"
 
 var columnMap map[string]func(Task) string = map[string]func(Task) string{
-	"ID":                  func(t Task) string { return t.ShortID() },
-	"Age":                 func(t Task) string { return t.Added.Format("2006-01-02") },
+	"ID":      func(t Task) string { return t.ShortID() },
+	"Urgency": func(t Task) string { return fmt.Sprintf("%.2f", t.Urgency) },
+	"Age": func(t Task) string {
+		return shortDuration(time.Since(t.Added))
+	},
 	descriptionColumnName: func(t Task) string { return t.Description },
-	"Due":                 func(t Task) string { return t.DueString() },
-	"Tags":                func(t Task) string { return strings.Join(t.Tags, ",") },
+	"Due": func(t Task) string {
+		// return t.DueString()
+		if t.Due != nil {
+			return shortDuration(time.Since(*t.Due) * -1)
+		}
+		return ""
+	},
+	"Tags": func(t Task) string { return strings.Join(t.Tags, ",") },
 	"Completed": func(t Task) string {
 		if t.Completed == nil {
 			return ""
@@ -233,50 +253,106 @@ func mustColumnValue(s string, t Task) string {
 	return got
 }
 
+// Rows consists of column and row strings
+type Rows [][]string
+
+// taskTable is a printable table of tasks
+type taskTable struct {
+	// rows    [][]string
+	columns []string
+	styling themes.Styling
+	tasks   Tasks
+}
+
+// Generate returns a real table from the struct
+func (t taskTable) Generate() *table.Table {
+	rows := make(Rows, len(t.tasks))
+	for idx, task := range t.tasks {
+		row := make([]string, len(t.columns))
+		for idx, c := range t.columns {
+			row[idx] = mustColumnValue(c, *task)
+		}
+		rows[idx] = row
+	}
+	return table.New().
+		Border(lipgloss.HiddenBorder()).
+		BorderStyle(lipgloss.NewStyle()).
+		StyleFunc(t.StyleFunc).
+		Headers(t.columns...).
+		Rows(rows...)
+}
+
+var columnStyles = map[string]func(Tasks, int, lipgloss.Style, themes.Styling) lipgloss.Style{
+	"due": func(tasks Tasks, row int, rowStyle lipgloss.Style, t themes.Styling) lipgloss.Style {
+		if tasks[row-1].Due != nil {
+			rdue := time.Since(*tasks[row-1].Due)
+			switch {
+			case rdue > 0:
+				return rowStyle.Copy().Foreground(t.PastDue)
+			case time.Now().Add(7 * 24 * time.Hour).After(*tasks[row-1].Due):
+				return rowStyle.Copy().Foreground(t.NearingDue)
+			default:
+				return rowStyle
+			}
+		}
+		return rowStyle
+	},
+}
+
+// StyleFunc provides styling for a set of rows
+func (t taskTable) StyleFunc(row, col int) lipgloss.Style {
+	if row == 0 {
+		return t.styling.RowHeader
+	}
+
+	even := row%2 == 0
+	rowStyle := t.styling.Row
+	if even {
+		rowStyle = t.styling.RowAlt
+	}
+
+	switch t.columns[col] {
+	case "Due":
+		return columnStyles["due"](t.tasks, row, rowStyle, t.styling)
+	default:
+		return rowStyle
+	}
+}
+
 // TaskTable returns a table of the given tasks
 // func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
 func (p *Poet) TaskTable(opts TableOpts) string {
-	if rerr := p.checkRecurring(); rerr != nil {
-		log.Warn("problem looking up recurring tasks", "err", rerr)
-	}
+	p.checkRecurring()
 	tasks := ApplyFilters(p.MustList(opts.Prefix), &opts.FilterParams, opts.Filters...)
+
+	p.refresh(tasks)
+
 	allTasksLen := len(tasks)
-	switch opts.SortBy.(type) {
-	case ByDue:
-		sort.Sort(ByDue(tasks))
-	case ByCompleted:
-		sort.Sort(ByCompleted(tasks))
-	default:
-		sort.Sort(tasks)
-	}
+
+	tasks.SortBy(opts.SortBy)
+
 	if opts.FilterParams.Limit > 0 {
 		tasks = tasks[0:min(len(tasks), opts.FilterParams.Limit)]
 	}
 
 	doc := strings.Builder{}
 
-	t := table.New().
-		Border(lipgloss.HiddenBorder()).
-		BorderStyle(lipgloss.NewStyle()).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			switch {
-			case row == 0:
-				return p.styling.RowHeader
-			case row%2 == 0:
-				return p.styling.RowAlt
-			default:
-				return p.styling.Row
-			}
-		}).
-		Headers(opts.Columns...)
-
-	for _, task := range tasks {
+	rows := make(Rows, len(tasks))
+	for iidx, task := range tasks {
 		row := make([]string, len(opts.Columns))
 		for idx, c := range opts.Columns {
-			row[idx] = mustColumnValue(c, task)
+			row[idx] = mustColumnValue(c, *task)
 		}
-		t.Row(row...)
+		rows[iidx] = row
 	}
+
+	tab := taskTable{
+		tasks:   tasks,
+		columns: opts.Columns,
+		styling: p.styling,
+	}
+
+	t := tab.Generate()
 	doc.WriteString(t.Render())
 
 	width := lipgloss.Width(t.Render())
@@ -339,7 +415,7 @@ func ApplyFilters(tasks Tasks, p *FilterParams, filters ...Filter) Tasks {
 		keep := true
 
 		for _, f := range filters {
-			if !f(p, r) {
+			if !f(p, *r) {
 				keep = false
 				break
 			}
@@ -367,6 +443,15 @@ func (a ByDue) Less(i, j int) bool {
 	return !a[j].Due.Before(*a[i].Due)
 }
 func (a ByDue) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// ByUrgency sorts using the Urgency field
+type ByUrgency Tasks
+
+func (a ByUrgency) Len() int { return len(a) }
+func (a ByUrgency) Less(i, j int) bool {
+	return a[i].Urgency > a[j].Urgency
+}
+func (a ByUrgency) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 // ByCompleted is the by completed date sorter
 type ByCompleted Tasks

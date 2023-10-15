@@ -51,6 +51,59 @@ func TestNewCalendar(t *testing.T) {
 	require.NotNil(t, got)
 }
 
+func TestShortDurations(t *testing.T) {
+	require.Equal(t, "2h", shortDuration(2*time.Hour), "simple-positive")
+	require.Equal(t, "-2h", shortDuration(-2*time.Hour), "simple-negative")
+	tests := map[string]struct {
+		given  time.Duration
+		expect string
+	}{
+		"a couple hours": {
+			given:  time.Hour * 2,
+			expect: "2h",
+		},
+		"a couple hours ago": {
+			given:  -time.Hour * 2,
+			expect: "-2h",
+		},
+		"a couple days": {
+			given:  time.Hour * 49,
+			expect: "2d",
+		},
+		"a couple days ago": {
+			given:  -time.Hour * 49,
+			expect: "-2d",
+		},
+		"a couple weeks": {
+			given:  time.Hour * 24 * 15,
+			expect: "2w",
+		},
+		"a couple weeks ago": {
+			given:  -time.Hour * 24 * 15,
+			expect: "-2w",
+		},
+		"a couple months": {
+			given:  time.Hour * 24 * 7 * 70,
+			expect: "2M",
+		},
+		"a couple months ago": {
+			given:  -time.Hour * 24 * 7 * 70,
+			expect: "-2M",
+		},
+		"a year": {
+			given:  time.Hour * 24 * 7 * 30 * 400,
+			expect: "1y",
+		},
+		"a year ago": {
+			given:  -time.Hour * 24 * 7 * 30 * 400,
+			expect: "-1y",
+		},
+	}
+	for desc, tt := range tests {
+		require.Equal(t, tt.expect, shortDuration(tt.given), desc)
+	}
+}
+
 func TestCalendarMonth(t *testing.T) {
 	present := time.Date(2023, 10, 1, 0, 0, 0, 42, time.Local) // This is a October
 	cal := NewCalendar(WithPresent(&present))

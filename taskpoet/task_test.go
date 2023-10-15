@@ -99,7 +99,7 @@ func TestBlankDescription(t *testing.T) {
 }
 
 func TestGetByPartialIDWithPath(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "foo", ID: "again with the fakeid again"},
 		{Description: "foo", ID: "fakeid"},
 		{Description: "foo", ID: "another_fakeid"},
@@ -142,7 +142,7 @@ func TestDefaults(t *testing.T) {
 
 // func TestGetByID(t *testing.T) {
 func TestGetByExactPath(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "foo", ID: "id-stay-active"},
 	}
 	err := lc.Task.AddSet(ts)
@@ -185,7 +185,7 @@ func TestDuplicateIDs(t *testing.T) {
 }
 
 func TestGetByExactID(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "foo", ID: "fakeid-exact"},
 		{Description: "foo", ID: "another_fakeid-exact"},
 		{Description: "foo"},
@@ -219,7 +219,7 @@ func TestListNonExistant(t *testing.T) {
 }
 
 func TestAddParent(t *testing.T) {
-	tasks := []Task{
+	tasks := Tasks{
 		{ID: "kid", Description: "Kid task"},
 		{ID: "parent", Description: "Parent task"},
 	}
@@ -273,7 +273,7 @@ func TestTaskDuplicateParents(t *testing.T) {
 }
 
 func TestShortID(t *testing.T) {
-	tasks := []Task{
+	tasks := Tasks{
 		{ID: "a", Description: "Short ID"},
 		{ID: "foo-bar-baz-bazinga", Description: "Long ID"},
 	}
@@ -348,7 +348,7 @@ func TestEditDescription(t *testing.T) {
 }
 
 func TestEditSet(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "Foo", ID: "edit-set-1"},
 		{Description: "Bar", ID: "edit-set-2"},
 	}
@@ -370,25 +370,19 @@ func TestEditSet(t *testing.T) {
 }
 
 func TestAddParentFunc(t *testing.T) {
-	tasks := []Task{
+	tasks := Tasks{
 		{ID: "kid-func", Description: "Kid task"},
 		{ID: "parent-func", Description: "Parent task"},
 	}
 
-	err := lc.Task.AddSet(tasks)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(tasks))
 
 	// Get newly created items
 	kid, _ := lc.Task.GetWithID("kid-func", "", "/active")
 	parent, _ := lc.Task.GetWithID("parent-func", "", "/active")
 
 	// Make sure adding a parent works
-	err = lc.Task.AddParent(kid, parent)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddParent(kid, parent))
 
 	// Get newly Editted
 	kid, _ = lc.Task.GetWithID("kid-func", "", "/active")
@@ -404,7 +398,7 @@ func TestAddParentFunc(t *testing.T) {
 }
 
 func TestAddChildFunc(t *testing.T) {
-	tasks := []Task{
+	tasks := Tasks{
 		{ID: "kid-func2", Description: "Kid task"},
 		{ID: "parent-func2", Description: "Parent task"},
 	}
@@ -438,7 +432,7 @@ func TestAddChildFunc(t *testing.T) {
 }
 
 func TestGetByPartialID(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "foo", ID: "partial-id-test"},
 		{Description: "foo", ID: "partial-id-test-2"},
 		{Description: "foo", ID: "unique-partial-id-test-2"},
@@ -469,7 +463,7 @@ func TestGetByPartialID(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
-	ts := []Task{
+	ts := Tasks{
 		{Description: "foo", ID: "describe-test"},
 		{Description: "Some parent", ID: "describe-parent"},
 	}
@@ -571,7 +565,7 @@ func TestDetectKeyPath(t *testing.T) {
 }
 
 func TestAddOrEditSet(t *testing.T) {
-	require.NoError(t, lc.Task.AddSet([]Task{
+	require.NoError(t, lc.Task.AddSet(Tasks{
 		{Description: "Foo", ID: "add-or-edit-do-edit-1"},
 	}))
 
@@ -585,26 +579,21 @@ func TestAddOrEditSet(t *testing.T) {
 	added, err := lc.Task.GetWithID("add-or-edit-do-add-1", "", "")
 	require.NoError(t, err)
 
-	assert.Equal(t, edited.Description, "Edited-desc")
-	assert.Equal(t, added.Description, "Added-desc")
+	require.Equal(t, edited.Description, "Edited-desc")
+	require.Equal(t, added.Description, "Added-desc")
 }
 
 func TestEditExistingValues(t *testing.T) {
-	ts := []Task{
+	ts := Tasks{
 		{Description: "Foo", ID: "edit-existing-1"},
 	}
-	err := lc.Task.AddSet(ts)
-	require.NoError(t, err)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(ts))
 
 	aets := []Task{
 		{Description: "Update", ID: "edit-existing-1"},
 	}
 
-	err = lc.Task.AddOrEditSet(aets)
-	require.NoError(t, err)
+	require.NoError(t, lc.Task.AddOrEditSet(aets))
 
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
 
@@ -627,11 +616,23 @@ func TestTaskTable(t *testing.T) {
 
 	table := p.TaskTable(TableOpts{
 		Prefix:  "/active",
-		Columns: []string{"ID", "Description"},
+		Columns: []string{"ID", "Description", "Due"},
 	})
 	require.Contains(
 		t,
 		table,
 		"draw a table and test it",
 	)
+}
+
+func TestUrgency(t *testing.T) {
+	p := newTestPoet(t)
+	got, err := p.Task.Add(MustNewTask(
+		WithDescription("something in the past"),
+		WithDue(datePTR(time.Now().Add(-24*time.Hour)))),
+	)
+	require.NoError(t, err)
+	require.Greater(t, got.Urgency, float64(0))
+	// Again from cache
+	require.Greater(t, got.Urgency, float64(0))
 }

@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+// EstimatedDate is something like '5h', 'now', 'tomorrow', etc
+/*
+type EstimatedDate time.Time
+
+func (e *EstimatedDate) String() string {
+	return e.String()
+}
+*/
+
 // Synonym is a helper for a relative time period
 type Synonym string
 

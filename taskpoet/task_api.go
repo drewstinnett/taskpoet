@@ -14,7 +14,7 @@ import (
 // APITaskResponse is the task response
 type APITaskResponse struct {
 	Pagination Pagination `json:"pagination"`
-	Data       []Task     `json:"data"`
+	Data       Tasks      `json:"data"`
 }
 
 func taskAPIAdd(c *gin.Context) {
@@ -33,14 +33,14 @@ func taskAPIAdd(c *gin.Context) {
 	checkAPIErr(c, err)
 	jsonDataS := string(jsonData)
 
-	var tasks []Task
+	var tasks Tasks
 	switch {
 	case strings.HasPrefix(jsonDataS, "{"):
 		var task Task
 		uerr := json.Unmarshal(jsonData, &task)
 		checkAPIErr(c, uerr)
 
-		tasks = append(tasks, task)
+		tasks = append(tasks, &task)
 	case strings.HasPrefix(jsonDataS, "["):
 		return
 	default:
@@ -60,7 +60,7 @@ func taskAPIList(c *gin.Context) {
 		})
 	}
 
-	var tasks []Task
+	var tasks Tasks
 
 	includeCompleted, err := getBoolParam(c, "include_completed", false)
 	checkAPIErr(c, err)
@@ -91,7 +91,7 @@ func taskAPIList(c *gin.Context) {
 	totalTasks := len(tasks)
 
 	pagination := generatePaginationFromRequest(c)
-	var pageData []Task
+	var pageData Tasks
 	skip := int(pagination.Limit * (pagination.Page - 1))
 	From(tasks).Skip(skip).Take(int(pagination.Limit)).ToSlice(&pageData)
 	currentMaxTask := skip + len(pageData)

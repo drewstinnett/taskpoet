@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 // RecurringTask is a task that recurs
@@ -15,7 +17,7 @@ type RecurringTask struct {
 // RecurringTasks represents multiple RecurringTask items
 type RecurringTasks []RecurringTask
 
-func (p *Poet) checkRecurring() error {
+func (p *Poet) checkRecurring() {
 	now := time.Now()
 	for _, recur := range p.RecurringTasks {
 		needsCreate := true
@@ -30,9 +32,8 @@ func (p *Poet) checkRecurring() error {
 
 		if needsCreate {
 			if _, err := p.Task.Add(MustNewTask(WithDescription(recur.Description))); err != nil {
-				return err
+				log.Warn("problem looking up recurring tasks", "err", err)
 			}
 		}
 	}
-	return nil
 }

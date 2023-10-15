@@ -14,9 +14,11 @@ type Theme interface {
 
 // Styling is the thing that holds all the lipgloss.Style things
 type Styling struct {
-	Row       lipgloss.Style
-	RowAlt    lipgloss.Style
-	RowHeader lipgloss.Style
+	Row        lipgloss.Style
+	RowAlt     lipgloss.Style
+	RowHeader  lipgloss.Style
+	PastDue    lipgloss.TerminalColor
+	NearingDue lipgloss.TerminalColor
 }
 
 // New returns the default built-in theme

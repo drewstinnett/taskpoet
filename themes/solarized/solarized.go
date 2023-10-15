@@ -50,17 +50,21 @@ var lightColors colors = colors{
 // NewLight returns a new light theme solarized styler
 func NewLight() themes.Styling {
 	return themes.Styling{
-		RowHeader: lipgloss.NewStyle().Foreground(lightColors.Accent0).Underline(true).Padding(0, 1, 0, 1),
-		Row:       lipgloss.NewStyle().Foreground(lightColors.Base0).Background(lightColors.Base3).Padding(0, 1, 0, 1),
-		RowAlt:    lipgloss.NewStyle().Foreground(lightColors.Base0).Background(lightColors.Base2).Padding(0, 1, 0, 1),
+		RowHeader:  lipgloss.NewStyle().Bold(false).Foreground(lightColors.Accent0).Underline(true).Padding(0, 1, 0, 1),
+		Row:        lipgloss.NewStyle().Bold(false).Foreground(lightColors.Base0).Background(lightColors.Base3).Padding(0, 1, 0, 1),
+		RowAlt:     lipgloss.NewStyle().Bold(false).Foreground(lightColors.Base0).Background(lightColors.Base2).Padding(0, 1, 0, 1),
+		NearingDue: lightColors.Accent00,
+		PastDue:    lightColors.Accent02,
 	}
 }
 
 // NewDark returns a new dark theme solarized styler
 func NewDark() themes.Styling {
 	return themes.Styling{
-		Row:       lipgloss.NewStyle().Foreground(lightColors.Base00).Background(lightColors.Base03).Padding(0, 1, 0, 1),
-		RowAlt:    lipgloss.NewStyle().Foreground(lightColors.Base00).Background(lightColors.Base02).Padding(0, 1, 0, 1),
-		RowHeader: lipgloss.NewStyle().Foreground(lightColors.Accent01).Underline(true).Padding(0, 1, 0, 1),
+		Row:        lipgloss.NewStyle().Foreground(lightColors.Base00).Background(lightColors.Base03).Padding(0, 1, 0, 1),
+		RowAlt:     lipgloss.NewStyle().Foreground(lightColors.Base00).Background(lightColors.Base02).Padding(0, 1, 0, 1),
+		RowHeader:  lipgloss.NewStyle().Foreground(lightColors.Accent01).Underline(true).Padding(0, 1, 0, 1),
+		NearingDue: lightColors.Accent00,
+		PastDue:    lightColors.Accent02,
 	}
 }

@@ -30,7 +30,8 @@ var getCompleteCmd = &cobra.Command{
 			},
 		}
 		checkErr(applyCobra(cmd, args, tableOpts))
-		var results []taskpoet.Task
+		var results []*taskpoet.Task
+
 		results, err := poetC.Task.List("/completed")
 		checkErr(err)
 		sort.Slice(results, func(i, j int) bool {

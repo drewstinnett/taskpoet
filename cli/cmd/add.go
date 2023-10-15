@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/drewstinnett/taskpoet/taskpoet"
@@ -16,17 +15,18 @@ func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
 		taskpoet.WithTags(mustGetCmd[[]string](cmd, "tag")),
 	}
 
-	now := time.Now()
-	dueIn := mustGetCmd[string](cmd, "due")
-	if dueIn != "" {
-		due := now.Add(taskpoet.MustParseDuration(dueIn))
-		opts = append(opts, taskpoet.WithDue(&due))
+	cal := taskpoet.NewCalendar()
+
+	if dueIn := mustGetCmd[string](cmd, "due"); dueIn != "" {
+		due, err := cal.Date(dueIn)
+		checkErr(err)
+		opts = append(opts, taskpoet.WithDue(due))
 	}
 
-	hideIn := mustGetCmd[string](cmd, "wait")
-	if hideIn != "" {
-		hide := now.Add(taskpoet.MustParseDuration(hideIn))
-		opts = append(opts, taskpoet.WithHideUntil(&hide))
+	if hideIn := mustGetCmd[string](cmd, "wait"); hideIn != "" {
+		hide, err := cal.Date(hideIn)
+		checkErr(err)
+		opts = append(opts, taskpoet.WithHideUntil(hide))
 	}
 
 	return taskpoet.MustNewTask(opts...)

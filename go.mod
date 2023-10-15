@@ -23,6 +23,7 @@ require (
 	go.etcd.io/bbolt v1.3.7
 	go.hein.dev/go-version v0.1.0
 	golang.org/x/term v0.13.0
+	gonum.org/v1/gonum v0.14.0
 )
 
 require (

@@ -11,7 +11,7 @@ import (
 func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
 	opts := []taskpoet.TaskOption{
 		taskpoet.WithEffortImpact(taskpoet.EffortImpact(mustGetCmd[uint](cmd, "effort-impact"))),
-		taskpoet.WithDescription(strings.Join(args, " ")),
+		// taskpoet.WithDescription(strings.Join(args, " ")),
 		taskpoet.WithTags(mustGetCmd[[]string](cmd, "tag")),
 	}
 
@@ -29,16 +29,17 @@ func taskWithCmd(cmd *cobra.Command, args []string) *taskpoet.Task {
 		opts = append(opts, taskpoet.WithHideUntil(hide))
 	}
 
-	return taskpoet.MustNewTask(opts...)
+	return taskpoet.MustNewTask(strings.Join(args, " "), opts...)
 }
 
 // addCmd represents the add command
-var addCmd = &cobra.Command{
-	Use:     "add",
-	Short:   "Add a new task",
-	Args:    cobra.MinimumNArgs(1),
-	Aliases: []string{"a"},
-	Example: `Add a new task by giving the description as an argument:
+func newAddCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "add",
+		Short:   "Add a new task",
+		Args:    cobra.MinimumNArgs(1),
+		Aliases: []string{"a"},
+		Example: `Add a new task by giving the description as an argument:
 $ taskpoet add "Learn a new skill"
 
 For us lazy folks, you can also leave the quotes out:
@@ -46,32 +47,29 @@ $ taskpoet add Learn a new skill
 
 Set an Effort/Impact to a new task:
 $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
-	Long:              `Add new task`,
-	ValidArgsFunction: noComplete,
-	Run: func(cmd *cobra.Command, args []string) {
-		// t := taskWithCmd(cmd, args)
+		Long:              `Add new task`,
+		ValidArgsFunction: noComplete,
+		Run: func(cmd *cobra.Command, args []string) {
+			// t := taskWithCmd(cmd, args)
 
-		added, err := poetC.Task.Add(taskWithCmd(cmd, args))
-		checkErr(err)
-
-		parentS := mustGetCmd[string](cmd, "parent")
-		if parentS != "" {
-			parent, err := poetC.Task.GetWithPartialID(parentS, "", "")
+			added, err := poetC.Task.Add(taskWithCmd(cmd, args))
 			checkErr(err)
-			if parent != nil {
-				checkErr(poetC.Task.AddParent(added, parent))
-			}
-		}
-		log.Info("Added task", "description", added.Description)
-	},
-}
 
-func init() {
-	rootCmd.AddCommand(addCmd)
-	err := bindAdd(addCmd)
-	if err != nil {
+			parentS := mustGetCmd[string](cmd, "parent")
+			if parentS != "" {
+				parent, err := poetC.Task.GetWithPartialID(parentS, "", "")
+				checkErr(err)
+				if parent != nil {
+					checkErr(poetC.Task.AddParent(added, parent))
+				}
+			}
+			log.Info("Added task", "description", added.Description)
+		},
+	}
+	if err := bindAdd(cmd); err != nil {
 		panic(err)
 	}
+	return cmd
 }
 
 func bindAdd(cmd *cobra.Command) error {

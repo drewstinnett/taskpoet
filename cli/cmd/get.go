@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewGetCmd is the new get command
-func NewGetCmd() *cobra.Command {
+// newGetCmd is the new get command
+func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "active",
 		Short:   "Get Active tasks, waiting to be completed",
@@ -42,8 +42,4 @@ func NewGetCmd() *cobra.Command {
 	}
 	bindTableOpts(cmd)
 	return cmd
-}
-
-func init() {
-	rootCmd.AddCommand(NewGetCmd())
 }

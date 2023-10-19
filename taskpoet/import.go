@@ -78,7 +78,7 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (in
 			pushStatus(c, s)
 			continue
 		}
-		t := MustNewTask(WithTaskWarriorTask(twItem))
+		t := MustNewTask(twItem.Description, WithTaskWarriorTask(twItem))
 
 		if !p.exists(t) {
 			if _, err := p.Task.Add(t); err != nil {

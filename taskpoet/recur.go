@@ -31,7 +31,7 @@ func (p *Poet) checkRecurring() {
 		}
 
 		if needsCreate {
-			if _, err := p.Task.Add(MustNewTask(WithDescription(recur.Description))); err != nil {
+			if _, err := p.Task.Add(MustNewTask(recur.Description)); err != nil {
 				log.Warn("problem looking up recurring tasks", "err", err)
 			}
 		}

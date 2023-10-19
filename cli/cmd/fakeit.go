@@ -13,57 +13,45 @@ import (
 )
 
 // fakeitCmd represents the fakeit command
-var fakeitCmd = &cobra.Command{
-	Use:    "fakeit",
-	Hidden: true,
-	Short:  "Generate a bunch of fake tasks",
-	Long:   `Generate a bunch of fake tasks. Mainly used for testing, load, boring stuff like that`,
-	Run: func(cmd *cobra.Command, args []string) {
-		var ts taskpoet.Tasks
-		log.Info("Generating TODO tasks")
-		for i := 0; i < 100; i++ {
-			desc, err := faker.GetLorem().Sentence(reflect.Value{})
-			checkErr(err)
+func newFakeitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:    "fakeit",
+		Hidden: true,
+		Short:  "Generate a bunch of fake tasks",
+		Long:   `Generate a bunch of fake tasks. Mainly used for testing, load, boring stuff like that`,
+		Run: func(cmd *cobra.Command, args []string) {
+			var ts taskpoet.Tasks
+			log.Info("Generating TODO tasks")
+			for i := 0; i < 100; i++ {
+				desc, err := faker.GetLorem().Sentence(reflect.Value{})
+				checkErr(err)
 
-			t := taskpoet.Task{
-				// Description: fmt.Sprintf("Task number %v", i),
-				Description: desc.(string),
-				Due:         randomDueDate(),
-				Added:       randomAddedDate(),
+				t := taskpoet.Task{
+					// Description: fmt.Sprintf("Task number %v", i),
+					Description: desc.(string),
+					Due:         randomDueDate(),
+					Added:       randomAddedDate(),
+				}
+				ts = append(ts, &t)
 			}
-			ts = append(ts, &t)
-		}
-		checkErr(poetC.Task.AddSet(ts))
+			checkErr(poetC.Task.AddSet(ts))
 
-		log.Info("Generating completed tasks")
-		var tsl taskpoet.Tasks
-		for i := 0; i < 100; i++ {
-			desc, serr := faker.GetLorem().Sentence(reflect.Value{})
-			checkErr(serr)
+			log.Info("Generating completed tasks")
+			var tsl taskpoet.Tasks
+			for i := 0; i < 100; i++ {
+				desc, serr := faker.GetLorem().Sentence(reflect.Value{})
+				checkErr(serr)
 
-			rad := randomAddedDate()
-			tsl = append(tsl, taskpoet.MustNewTask(
-				taskpoet.WithDescription(desc.(string)),
-				taskpoet.WithAdded(&rad),
-				taskpoet.WithCompleted(randomCompletedDate()),
-			))
-		}
-		checkErr(poetC.Task.AddSet(tsl))
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(fakeitCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// fakeitCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// fakeitCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+				rad := randomAddedDate()
+				tsl = append(tsl, taskpoet.MustNewTask(desc.(string),
+					taskpoet.WithAdded(&rad),
+					taskpoet.WithCompleted(randomCompletedDate()),
+				))
+			}
+			checkErr(poetC.Task.AddSet(tsl))
+		},
+	}
+	return cmd
 }
 
 func randomDueDate() *time.Time {

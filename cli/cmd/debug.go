@@ -8,37 +8,26 @@ import (
 )
 
 // debugCmd represents the debug command
-var debugCmd = &cobra.Command{
-	Use:    "debug",
-	Short:  "Mostly just barf out the DB",
-	Long:   `Barf the DB to stdout for debugging purposes 🤮`,
-	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		err := poetC.DB.View(func(tx *bolt.Tx) error {
-			return tx.ForEach(func(bucketName []byte, bucket *bolt.Bucket) error {
-				fmt.Println("Bucket: ", string(bucketName))
-				err := bucket.ForEach(func(k, v []byte) error {
-					fmt.Println(string(k), " -> ", string(v))
+func newDebugCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:    "debug",
+		Short:  "Mostly just barf out the DB",
+		Long:   `Barf the DB to stdout for debugging purposes 🤮`,
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			err := poetC.DB.View(func(tx *bolt.Tx) error {
+				return tx.ForEach(func(bucketName []byte, bucket *bolt.Bucket) error {
+					fmt.Println("Bucket: ", string(bucketName))
+					err := bucket.ForEach(func(k, v []byte) error {
+						fmt.Println(string(k), " -> ", string(v))
+						return nil
+					})
+					checkErr(err)
 					return nil
 				})
-				checkErr(err)
-				return nil
 			})
-		})
-		checkErr(err)
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(debugCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// debugCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// debugCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+			checkErr(err)
+		},
+	}
+	return cmd
 }

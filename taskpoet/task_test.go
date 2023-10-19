@@ -65,7 +65,7 @@ func TestIDSlash(t *testing.T) {
 		task:  Task{ID: "foo/bar", Description: "Invalid-id"},
 		valid: false,
 	*/
-	_, err := NewTask(WithDescription("foo"), WithID("foo/bar"))
+	_, err := NewTask("foo", WithID("foo/bar"))
 	require.EqualError(t, err, "ID Cannot contain a slash (/)")
 }
 
@@ -93,7 +93,7 @@ func TestCompleteTask(t *testing.T) {
 }
 
 func TestBlankDescription(t *testing.T) {
-	_, err := NewTask()
+	_, err := NewTask("")
 	require.Error(t, err)
 	require.EqualError(t, err, "missing description for Task")
 }
@@ -243,9 +243,8 @@ func TestAddParent(t *testing.T) {
 }
 
 func TestTaskSelfAddParent(t *testing.T) {
-	_, err := NewTask(
+	_, err := NewTask("foo",
 		WithID("test-self-add-parent"),
-		WithDescription("foo"),
 		WithParents([]string{"test-self-add-parent"}),
 	)
 	require.Error(t, err)
@@ -253,9 +252,8 @@ func TestTaskSelfAddParent(t *testing.T) {
 }
 
 func TestTaskSelfAddChild(t *testing.T) {
-	_, err := NewTask(
+	_, err := NewTask("foo",
 		WithID("test-self-add-child"),
-		WithDescription("foo"),
 		WithChildren([]string{"test-self-add-child"}),
 	)
 	require.Error(t, err)
@@ -263,8 +261,7 @@ func TestTaskSelfAddChild(t *testing.T) {
 }
 
 func TestTaskDuplicateParents(t *testing.T) {
-	_, err := NewTask(
-		WithID("some-id"),
+	_, err := NewTask("some-id",
 		WithDescription("foo"),
 		WithParents([]string{"dup", "dup"}),
 	)
@@ -298,12 +295,10 @@ func TestEditNonExisting(t *testing.T) {
 }
 
 func TestEditInvalid(t *testing.T) {
-	task, err := NewTask(
+	task, err := NewTask("foo",
 		WithID("soon-to-be-valid"),
-		WithDescription("foo"),
 	)
 	require.NoError(t, err)
-	// task := &Task{ID: "soon-to-be-invalid", Description: "foo"}
 	_, aerr := lc.Task.Add(task)
 	require.NoError(t, aerr)
 
@@ -506,9 +501,8 @@ func TestHideAfterDue(t *testing.T) {
 	now := time.Now()
 	sooner := now.Add(time.Minute * 5)
 	later := now.Add(time.Minute * 10)
-	_, err := NewTask(
+	_, err := NewTask("test-hide-after-due",
 		WithID("test-hide-after-due"),
-		WithDescription("test-hide-after-due"),
 		WithHideUntil(&later),
 		WithDue(&sooner),
 	)
@@ -611,7 +605,7 @@ func TestCompleteIDs(t *testing.T) {
 
 func TestTaskTable(t *testing.T) {
 	p := newTestPoet(t)
-	_, err := p.Task.Add(MustNewTask(WithDescription("draw a table and test it")))
+	_, err := p.Task.Add(MustNewTask("draw a table and test it"))
 	require.NoError(t, err)
 
 	table := p.TaskTable(TableOpts{
@@ -627,12 +621,30 @@ func TestTaskTable(t *testing.T) {
 
 func TestUrgency(t *testing.T) {
 	p := newTestPoet(t)
-	got, err := p.Task.Add(MustNewTask(
-		WithDescription("something in the past"),
+	got, err := p.Task.Add(MustNewTask("something in the past",
 		WithDue(datePTR(time.Now().Add(-24*time.Hour)))),
 	)
 	require.NoError(t, err)
 	require.Greater(t, got.Urgency, float64(0))
 	// Again from cache
 	require.Greater(t, got.Urgency, float64(0))
+}
+
+func TestMiscNewWith(t *testing.T) {
+	a := time.Date(2009, 11, 17, 20, 34, 58, 651387237, time.UTC)
+	require.Equal(
+		t,
+		&Task{
+			Description:  "some description",
+			Urgency:      float64(0),
+			EffortImpact: 2,
+			Tags:         []string{"bar", "foo"},
+			Added:        a,
+		},
+		MustNewTask("some description",
+			WithEffortImpact(EffortImpactMedium),
+			WithTags([]string{"foo", "bar"}),
+			WithAdded(&a),
+		),
+	)
 }

@@ -192,7 +192,7 @@ const (
 	LG int = 10
 )
 
-var docStyle = lipgloss.NewStyle().Padding(0, 2, 0, 2) // subtle    = lipgloss.AdaptiveColor{Light: "#f3f4f0", Dark: "#383838"}
+var docStyle = lipgloss.NewStyle().Padding(0).Margin(0)
 
 // TableOpts defines the data displayed in a table
 type TableOpts struct {
@@ -346,16 +346,14 @@ func (p *Poet) TaskTable(opts TableOpts) string {
 		rows[iidx] = row
 	}
 
-	tab := taskTable{
+	tr := taskTable{
 		tasks:   tasks,
 		columns: opts.Columns,
 		styling: p.styling,
-	}
+	}.Generate().Render()
 
-	t := tab.Generate()
-	doc.WriteString(t.Render())
-
-	width := lipgloss.Width(t.Render())
+	doc.WriteString(tr)
+	width := lipgloss.Width(tr)
 	addLimitWarning(&doc, width-4, opts.FilterParams.Limit, allTasksLen)
 
 	w, _, _ := term.GetSize(int(os.Stdout.Fd()))

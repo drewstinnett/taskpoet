@@ -21,7 +21,6 @@ require (
 	github.com/spf13/viper v1.17.0
 	github.com/stretchr/testify v1.8.4
 	go.etcd.io/bbolt v1.3.7
-	go.hein.dev/go-version v0.1.0
 	golang.org/x/term v0.13.0
 	gonum.org/v1/gonum v0.14.0
 )
@@ -88,7 +87,5 @@ require (
 	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
 )

@@ -27,8 +27,7 @@ var (
 	namespace string
 	poetC     *taskpoet.Poet
 	verbose   bool
-	// dbConfig     *taskpoet.DBConfig
-	// logger       *slog.Logger
+	version   string = "dev"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -51,19 +50,44 @@ Effort/Impact Assessment, based on Limoncelli concept
 2 - High Effort, High Impact (Homework)
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		},
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {},
+		Version:          version,
 	}
+	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
+	cmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")
+	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose logging")
+	cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	addCmds(cmd,
+		newAddCmd(),
+		newFakeitCmd(),
+		newCompleteCmd(),
+		newCompletedCmd(),
+		newDebugCmd(),
+		newDescribeCmd(),
+		newGetCmd(),
+		newImportCmd(),
+		newLogCmd(),
+		newPluginsCmd(),
+		newServerCmd(),
+		newUICmd(),
+	)
 	return cmd
 }
 
-var rootCmd = NewRootCmd()
+func addCmds(cmd *cobra.Command, additionalCmds ...*cobra.Command) {
+	for _, item := range additionalCmds {
+		cmd.AddCommand(item)
+	}
+}
+
+// var rootCmd = NewRootCmd()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	// rootCmd := NewRootCmd()
 
+	rootCmd := NewRootCmd()
 	cmd, _, err := rootCmd.Find(os.Args[1:])
 	// default cmd if no cmd is given
 	if err == nil && cmd.Use == rootCmd.Use && cmd.Flags().Parse(os.Args[1:]) != pflag.ErrHelp {
@@ -87,14 +111,6 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose logging")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.

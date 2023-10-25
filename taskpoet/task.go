@@ -45,28 +45,12 @@ type Comment struct {
 }
 
 // DueString returns a string representation of Due
+/*
 func (t Task) DueString() string {
 	if t.Due != nil {
 		return t.Due.Format("2006-01-02")
 	}
 	return ""
-}
-
-// Urgency is an attempt at creating an urgency algorhthm similar to TaskWarrior
-// for tasks
-/*
-func (t *Task) Urgency() float64 {
-	// Did we already run this?
-	if t.urgency != nil {
-		return *t.urgency
-	}
-	u := float64(0)
-	if (t.Due != nil) && time.Now().After(*t.Due) {
-		u = 1
-	}
-	// Lazy cache
-	t.urgency = &u
-	return u
 }
 */
 
@@ -173,9 +157,6 @@ type TaskService interface {
 
 	// Complete a task
 	Complete(t *Task) error
-
-	// Check to ensure Task is in a valid state
-	// Validate(t *Task, o *TaskValidateOpts) error
 
 	// Sweet lord, this gettin' confusin' Drew
 	GetPlugins() (map[string]Creator, error)
@@ -661,8 +642,8 @@ func (svc *TaskServiceOp) GetIDsByPrefix(prefix string) ([]string, error) {
 func (p Poet) CompleteIDsWithPrefix(prefix, toComplete string) []string {
 	allIDs := []string{}
 
-	err := p.DB.View(func(tx *bolt.Tx) error {
-		err := p.getBucket(tx).ForEach(func(k, v []byte) error {
+	if err := p.DB.View(func(tx *bolt.Tx) error {
+		if err := p.getBucket(tx).ForEach(func(k, v []byte) error {
 			if strings.HasPrefix(string(k), prefix) {
 				idPieces := strings.Split(string(k), "/")
 				id := idPieces[len(idPieces)-1]
@@ -673,13 +654,11 @@ func (p Poet) CompleteIDsWithPrefix(prefix, toComplete string) []string {
 				}
 			}
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil
 	}
 
@@ -801,8 +780,8 @@ func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
 }
 
 // MustNewTask returns a task or panics
-func MustNewTask(options ...TaskOption) *Task {
-	got, err := NewTask(options...)
+func MustNewTask(description string, options ...TaskOption) *Task {
+	got, err := NewTask(description, options...)
 	if err != nil {
 		panic(err)
 	}
@@ -840,10 +819,14 @@ func (t Task) Validate() error {
 }
 
 // NewTask returns a new task given functional options
-func NewTask(options ...TaskOption) (*Task, error) {
-	task := &Task{}
+func NewTask(desc string, options ...TaskOption) (*Task, error) {
+	task := &Task{
+		Description: desc,
+	}
 	for _, opt := range options {
 		opt(task)
 	}
+	// Sort the tags alphabetically
+	sort.Strings(task.Tags)
 	return task, task.Validate()
 }

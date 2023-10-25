@@ -32,8 +32,7 @@ func TestSimpleRecursionHit(t *testing.T) {
 	)
 	now := time.Now()
 	require.NoError(t, err)
-	_, err = p.Task.Add(MustNewTask(
-		WithDescription("do something frequently"),
+	_, err = p.Task.Add(MustNewTask("do something frequently",
 		WithCompleted(&now),
 	))
 	require.NoError(t, err)

@@ -6,13 +6,13 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cli/
+    main: ./cmd/taskpoet/
     mod_timestamp: '{{ .CommitTimestamp }}'
     ldflags:
       - '-s -w'
-      - -X github.com/drewstinnett/taskpoet/cli/cmd.date={{ .CommitTimestamp }}
-      - -X github.com/drewstinnett/taskpoet/cli/cmd.version={{ .Tag }}
-      - -X github.com/drewstinnett/taskpoet/cli/cmd.commit={{ .ShortCommit }}
+      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.date={{ .CommitTimestamp }}
+      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.version={{ .Tag }}
+      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.commit={{ .ShortCommit }}
     flags:
       - -trimpath
     goos:

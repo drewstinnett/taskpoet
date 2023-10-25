@@ -80,7 +80,7 @@ func newTestPoet(t *testing.T) *Poet {
 
 func TestDelete(t *testing.T) {
 	p := newTestPoet(t)
-	created, err := p.Task.Add(MustNewTask(WithDescription("about to delete this")))
+	created, err := p.Task.Add(MustNewTask("about to delete this"))
 	require.NoError(t, err)
 	require.NotNil(t, created)
 

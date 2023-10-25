@@ -9,7 +9,9 @@ import (
 func TestDefaultNewCurator(t *testing.T) {
 	c := NewCurator()
 	require.NotNil(t, c)
-	require.NotPanics(t, func() { c.Weigh(*MustNewTask(WithDescription("some task"))) })
+	require.NotPanics(t, func() {
+		c.Weigh(*MustNewTask("some task"))
+	})
 }
 
 func TestNewCuratorWithWeights(t *testing.T) {
@@ -20,5 +22,5 @@ func TestNewCuratorWithWeights(t *testing.T) {
 		},
 	))
 	require.NotNil(t, c)
-	require.Equal(t, float64(2), c.Weigh(*MustNewTask(WithDescription("some thing"))))
+	require.Equal(t, float64(2), c.Weigh(*MustNewTask("some thing")))
 }

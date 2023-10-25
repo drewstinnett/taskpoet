@@ -16,6 +16,7 @@ func newGetCmd() *cobra.Command {
 		Use:     "active",
 		Short:   "Get Active tasks, waiting to be completed",
 		Aliases: []string{"g", "a", "get"},
+		Version: version,
 		Long: `Get Active Tasks
 `,
 		Run: func(cmd *cobra.Command, args []string) {

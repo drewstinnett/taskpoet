@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const invalidDuration = "time: invalid duration "
+
 // Copied from: https://gist.github.com/xhit/79c9e137e1cfe332076cdda9f5e24699
 var unitMap = map[string]int64{
 	"ns": int64(time.Nanosecond),
@@ -56,7 +58,7 @@ func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 		return 0, nil
 	}
 	if s == "" {
-		return 0, errors.New("time: invalid duration " + quote(orig))
+		return 0, errors.New(invalidDuration + quote(orig))
 	}
 	for s != "" {
 		var (
@@ -68,13 +70,13 @@ func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 
 		// The next character must be [0-9.]
 		if !(s[0] == '.' || '0' <= s[0] && s[0] <= '9') {
-			return 0, errors.New("time: invalid duration " + quote(orig))
+			return 0, errors.New(invalidDuration + quote(orig))
 		}
 		// Consume [0-9]*
 		pl := len(s)
 		v, s, err = leadingInt(s)
 		if err != nil {
-			return 0, errors.New("time: invalid duration " + quote(orig))
+			return 0, errors.New(invalidDuration + quote(orig))
 		}
 		pre := pl != len(s) // whether we consumed anything before a period
 
@@ -88,7 +90,7 @@ func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 		}
 		if !pre && !post {
 			// no digits (e.g. ".s" or "-.s")
-			return 0, errors.New("time: invalid duration " + quote(orig))
+			return 0, errors.New(invalidDuration + quote(orig))
 		}
 
 		// Consume unit.
@@ -110,7 +112,7 @@ func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 		}
 		if v > (1<<63-1)/unit {
 			// overflow
-			return 0, errors.New("time: invalid duration " + quote(orig))
+			return 0, errors.New(invalidDuration + quote(orig))
 		}
 		v *= unit
 		if f > 0 {
@@ -119,13 +121,13 @@ func ParseDuration(s string) (time.Duration, error) { // nolint:funlen,gocognit
 			v += int64(float64(f) * (float64(unit) / scale))
 			if v < 0 {
 				// overflow
-				return 0, errors.New("time: invalid duration " + quote(orig))
+				return 0, errors.New(invalidDuration + quote(orig))
 			}
 		}
 		d += v
 		if d < 0 {
 			// overflow
-			return 0, errors.New("time: invalid duration " + quote(orig))
+			return 0, errors.New(invalidDuration + quote(orig))
 		}
 	}
 

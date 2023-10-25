@@ -27,9 +27,7 @@ var (
 	namespace string
 	poetC     *taskpoet.Poet
 	verbose   bool
-	Version   string
-	// dbConfig     *taskpoet.DBConfig
-	// logger       *slog.Logger
+	version   string = "dev"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -53,7 +51,7 @@ Effort/Impact Assessment, based on Limoncelli concept
 3 - Low Effort, Low Impact (Busywork)
 4 - High Effort, Low Impact (Charity)`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {},
-		Version:          Version,
+		Version:          version,
 	}
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
 	cmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Namespace of tasks")

@@ -17,8 +17,8 @@ func TestDefaultNewCurator(t *testing.T) {
 func TestNewCuratorWithWeights(t *testing.T) {
 	c := NewCurator(WithWeights(
 		weightMap{
-			"foo": func(t Task) float64 { return float64(1) },
-			"bar": func(t Task) float64 { return float64(1) },
+			"foo": func(t Task) (float64, int, string) { return float64(1), 1, "" },
+			"bar": func(t Task) (float64, int, string) { return float64(1), 1, "" },
 		},
 	))
 	require.NotNil(t, c)

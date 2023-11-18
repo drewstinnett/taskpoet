@@ -9,18 +9,15 @@ import (
 func TestPriorityStrings(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		id          int
-		description string
+		given  EffortImpact
+		expect string
 	}{
-		{id: 0, description: "Unset"},
-		{id: 4, description: "High Effort, Low Impact"},
+		{given: EffortImpact(0), expect: "Unset"},
+		{given: EffortImpact(4), expect: "High Effort, Low Impact"},
 	}
 
-	for _, test := range tests {
-		gotDescription := EffortImpactText(test.id)
-		if gotDescription != test.description {
-			t.Errorf("Expected %v but got %v", test.description, gotDescription)
-		}
+	for _, tt := range tests {
+		require.Equal(t, tt.expect, tt.given.String())
 	}
 }
 

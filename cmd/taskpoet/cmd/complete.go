@@ -12,20 +12,15 @@ func newCompleteCmd() *cobra.Command {
 		Use:     "done TASK",
 		Short:   "Mark a task as done",
 		Long:    `Mark a task as done`,
-		Aliases: []string{"c"},
+		Aliases: []string{"c", "complete", "finish"},
 		Args:    cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			task, err := poetC.Task.GetWithPartialID(args[0], "", "/active")
 			checkErr(err)
 			checkErr(poetC.Task.Complete(task))
-			log.Info("Completed task, nice work!", "task", task.Description)
+			log.Info("Completed task, nice work!", "task", task.Description, "id", task.ShortID())
 		},
-		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			if len(args) != 0 {
-				return nil, cobra.ShellCompDirectiveNoFileComp
-			}
-			return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
-		},
+		ValidArgsFunction: completeActive,
 	}
 	cmd.PersistentFlags().IntP("limit", "l", 100, "Limit to N results")
 	return cmd

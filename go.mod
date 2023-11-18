@@ -22,7 +22,6 @@ require (
 	github.com/stretchr/testify v1.8.4
 	go.etcd.io/bbolt v1.3.7
 	golang.org/x/term v0.13.0
-	gonum.org/v1/gonum v0.14.0
 )
 
 require (

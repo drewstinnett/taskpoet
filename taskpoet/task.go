@@ -35,24 +35,47 @@ type Task struct {
 	Tags         []string     `json:"tags,omitempty"`
 	Comments     []Comment    `json:"comments,omitempty"`
 	Project      string       `json:"project,omitempty"`
-	Urgency      float64      `json:"urgency:omitempty"`
+	Urgency      float64      `json:"urgency,omitempty"`
+}
+
+// DescriptionDetails is the details along with any comments or extra info we like to include
+func (t Task) DescriptionDetails() string {
+	ret := strings.Builder{}
+	ret.WriteString(t.Description + "\n")
+	if len(t.Comments) > 0 {
+		for _, c := range t.Comments {
+			ret.WriteString(fmt.Sprintf(" %v - %v\n", c.Added.Format("2006-01-02"), c.Text))
+		}
+	}
+	return strings.TrimSpace(ret.String())
 }
 
 // Comment is just a little comment/note on a task
 type Comment struct {
-	Added   time.Time `json:"added,omitempty"`
-	Comment string    `json:"comment,omitempty"`
+	Added time.Time `json:"added,omitempty"`
+	Text  string    `json:"text,omitempty"`
 }
 
-// DueString returns a string representation of Due
-/*
-func (t Task) DueString() string {
-	if t.Due != nil {
-		return t.Due.Format("2006-01-02")
+// NewComment returns a new comment item using functional arguments
+func NewComment(s string) (*Comment, error) {
+	if s == "" {
+		return nil, errors.New("text must not be empty")
 	}
-	return ""
+	return &Comment{
+		Added: time.Now(),
+		Text:  s,
+	}, nil
 }
-*/
+
+// AddComment adds a comment to the task
+func (t *Task) AddComment(s string) error {
+	c, err := NewComment(s)
+	if err != nil {
+		return err
+	}
+	t.Comments = append(t.Comments, *c)
+	return nil
+}
 
 // Tasks represents multiple Task items
 type Tasks []*Task
@@ -104,19 +127,6 @@ func (t *Task) DetectKeyPath() []byte {
 }
 
 func (t *Task) setDefaults(d *Task) {
-	if t.Added.IsZero() {
-		t.Added = time.Now()
-	}
-
-	// If no ID is set, just generate one
-	if t.ID == "" {
-		t.ID = uuid.New().String()
-	}
-
-	// Set the plugin id to default if not set
-	if t.PluginID == "" {
-		t.PluginID = DefaultPluginID
-	}
 	// Handle defaults due
 	if d != nil {
 		if t.Due == nil && d.Due != nil {
@@ -429,12 +439,12 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 	data := [][]string{
 		{"Field", "Value", "Read-Value"},
 		{"ID", t.ShortID(), t.ID},
-		{"Description", t.Description, ""},
+		{"Description", t.DescriptionDetails(), ""},
 		{"Added", added, fmt.Sprintf("%+v", t.Added)},
 		{"Completed", completed, fmt.Sprintf("%+v", t.Completed)},
 		{"Due", due, fmt.Sprintf("%+v", t.Due)},
 		{"Wait", wait, fmt.Sprintf("%+v", t.HideUntil)},
-		{"Effort/Impact", EffortImpactText(int(t.EffortImpact)), fmt.Sprintf("%+v", t.EffortImpact)},
+		{"Effort/Impact", t.EffortImpact.String(), fmt.Sprintf("%+v", t.EffortImpact)},
 		{"Parents", parentsBuff.String(), fmt.Sprintf("%+v", t.Parents)},
 		{"Children", childrenBuff.String(), fmt.Sprintf("%+v", t.Children)},
 		{"Tags", fmt.Sprintf("%+v", t.Tags), ""},
@@ -748,7 +758,11 @@ func WithHideUntil(d *time.Time) TaskOption {
 func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
 	return func(t *Task) {
 		t.Description = twItem.Description
-		t.ID = twItem.UUID
+		if twItem.UUID != "" {
+			t.ID = twItem.UUID
+		} else {
+			t.ID = uuid.New().String()
+		}
 		t.Tags = twItem.Tags
 		t.Due = (*time.Time)(twItem.Due)
 		t.Completed = (*time.Time)(twItem.End)
@@ -765,7 +779,7 @@ func WithTaskWarriorTask(twItem TaskWarriorTask) TaskOption {
 		if twItem.Annotations != nil {
 			t.Comments = make([]Comment, len(twItem.Annotations))
 			for idx, a := range twItem.Annotations {
-				t.Comments[idx].Comment = a.Description
+				t.Comments[idx].Text = a.Description
 				t.Comments[idx].Added = time.Time(*a.Entry)
 			}
 		}
@@ -790,38 +804,34 @@ func MustNewTask(description string, options ...TaskOption) *Task {
 
 // Validate makes sure the task isn't malformed
 func (t Task) Validate() error {
-	if t.Description == "" {
+	switch {
+	case t.Description == "":
 		return errors.New("missing description for Task")
-	}
-	if strings.Contains(t.ID, "/") {
+	case strings.Contains(t.ID, "/"):
 		return errors.New("ID Cannot contain a slash (/)")
-	}
-	// If both HideUntil and Due are set, make sure HideUntil isn't after Due
-	if t.HideUntil != nil && t.Due != nil {
-		if t.HideUntil.After(*t.Due) {
-			return fmt.Errorf("HideUntil cannot be later than Due")
-		}
-	}
-
+		// If both HideUntil and Due are set, make sure HideUntil isn't after Due
+	case (t.HideUntil != nil && t.Due != nil) && t.HideUntil.After(*t.Due):
+		return fmt.Errorf("HideUntil cannot be later than Due")
 	// Make sure we didn't add ourself
-	if containsString(t.Parents, t.ID) {
+	case containsString(t.Parents, t.ID):
 		return fmt.Errorf("self id is set in the parents, we don't do that")
-	}
-	if containsString(t.Children, t.ID) {
+	case containsString(t.Children, t.ID):
 		return fmt.Errorf("self id is set in the children, we don't do that")
-	}
-	// kid, _ := lc.Task.Add(&Task{ID: "test-self-add-child", Description: "foo"})
 	// Make sure Parents contains no duplicates
-	if !CheckUniqueStringSlice(t.Parents) {
+	case !CheckUniqueStringSlice(t.Parents):
 		return fmt.Errorf("found duplicate ids in the Parents field")
+	default:
+		return nil
 	}
-	return nil
 }
 
 // NewTask returns a new task given functional options
 func NewTask(desc string, options ...TaskOption) (*Task, error) {
 	task := &Task{
+		ID:          uuid.New().String(),
 		Description: desc,
+		Added:       time.Now(),
+		PluginID:    DefaultPluginID,
 	}
 	for _, opt := range options {
 		opt(task)

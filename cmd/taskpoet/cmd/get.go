@@ -22,7 +22,7 @@ func newGetCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			tableOpts := mustTableOptsWithCmd(cmd, args)
 			tableOpts.Prefix = "/active"
-			tableOpts.Columns = []string{"ID", "Age", "Due", "Description", "Urgency"}
+			tableOpts.Columns = []string{"ID", "Age", "Due", "Description", "Urgency", "Tags"}
 			tableOpts.SortBy = taskpoet.ByUrgency{}
 			tableOpts.Filters = []taskpoet.Filter{
 				taskpoet.FilterHidden,

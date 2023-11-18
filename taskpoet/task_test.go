@@ -454,30 +454,26 @@ func TestDescribe(t *testing.T) {
 	lc.Task.AddSet(ts)
 	task, _ := lc.Task.GetWithID("describe-test", "builtin", "/active")
 	taskP, _ := lc.Task.GetWithID("describe-parent", "builtin", "/active")
-	lc.Task.Describe(task)
+	lc.DescribeTask(*task)
 
 	// Describe with parent test
 	lc.Task.AddParent(task, taskP)
 	task, err := lc.Task.Edit(task)
-	if err != nil {
-		t.Error(err)
-	}
-	lc.Task.Describe(task)
+	require.NoError(t, err)
+	lc.DescribeTask(*task)
 
 	// Describe with parent test
 	taskP, err = lc.Task.GetWithID("describe-parent", "builtin", "/active")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
-	lc.Task.Describe(taskP)
+	lc.DescribeTask(*taskP)
 
 	// Describe a task with more things set
 	n := time.Now()
 	wait := n.Add(time.Hour * 1)
 	due := n.Add(time.Hour * 24)
 	completed := n.Add(time.Hour * 12)
-	lc.Task.Describe(&Task{
+	lc.DescribeTask(Task{
 		ID:          "describe-descriptive",
 		Description: "foo",
 		Due:         &due,

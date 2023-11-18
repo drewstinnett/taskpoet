@@ -1,7 +1,6 @@
 package taskpoet
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pterm/pterm"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -153,7 +151,7 @@ type TaskService interface {
 	AddChild(p, c *Task) error
 
 	// Describe something
-	Describe(t *Task) error
+	// Describe(t *Task) error
 
 	// Edit a Task entry
 	Edit(t *Task) (*Task, error)
@@ -398,6 +396,7 @@ func (svc *TaskServiceOp) Edit(t *Task) (*Task, error) {
 	return t, nil
 }
 
+/*
 // Describe describes a task
 func (svc *TaskServiceOp) Describe(t *Task) error {
 	now := time.Now()
@@ -452,6 +451,7 @@ func (svc *TaskServiceOp) Describe(t *Task) error {
 
 	return pterm.DefaultTable.WithHasHeader().WithData(data).Render()
 }
+*/
 
 // TaskServiceOp is the TaskService Operator
 type TaskServiceOp struct {

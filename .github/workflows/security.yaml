@@ -14,9 +14,7 @@ jobs:
           fetch-depth: 2
       - uses: actions/setup-go@v4
         with:
+          check-latest: true
           go-version: '1.21'
       - id: govulncheck
         uses: golang/govulncheck-action@v1
-        with:
-           go-version-input: 1.21
-           go-package: ./...

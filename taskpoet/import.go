@@ -2,6 +2,7 @@ package taskpoet
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -81,6 +82,7 @@ func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (in
 		t := MustNewTask(twItem.Description, WithTaskWarriorTask(twItem))
 
 		if !p.exists(t) {
+			fmt.Fprintf(os.Stderr, "DIIING: %+v\n", t)
 			if _, err := p.Task.Add(t); err != nil {
 				s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
 			} else {

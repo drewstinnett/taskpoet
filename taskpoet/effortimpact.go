@@ -30,6 +30,11 @@ func (e EffortImpact) Emoji() string {
 	return effortImpactEmoji[e]
 }
 
+// String satisfies the Stringer interface and allows us to easily print these out
+func (e EffortImpact) String() string {
+	return effortImpactText[e]
+}
+
 var effortImpactText = map[EffortImpact]string{
 	EffortImpactUnset:  "Unset",
 	EffortImpactHigh:   "Low Effort, High Impact",
@@ -44,9 +49,4 @@ var effortImpactEmoji = map[EffortImpact]string{
 	EffortImpactMedium: "🟡",
 	EffortImpactLow:    "🔴",
 	EffortImpactAvoid:  "💀",
-}
-
-// EffortImpactText returns text from the code
-func EffortImpactText(code int) string {
-	return effortImpactText[EffortImpact(code)]
 }

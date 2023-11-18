@@ -60,6 +60,7 @@ Effort/Impact Assessment, based on Limoncelli concept
 	addCmds(cmd,
 		newAddCmd(),
 		newFakeitCmd(),
+		newCommentCmd(),
 		newCompleteCmd(),
 		newCompletedCmd(),
 		newDebugCmd(),
@@ -269,4 +270,11 @@ func getTheme(n string) themes.Styling {
 		return t()
 	}
 	return themes.New()
+}
+
+func completeActive(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return poetC.CompleteIDsWithPrefix("/active", toComplete), cobra.ShellCompDirectiveNoFileComp
 }

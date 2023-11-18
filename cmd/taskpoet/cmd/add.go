@@ -63,7 +63,7 @@ $ taskpoet add --effort-impact 2 Rebuild all the remote servers`,
 					checkErr(poetC.Task.AddParent(added, parent))
 				}
 			}
-			log.Info("Added task", "description", added.Description)
+			log.Info("Added task", "description", added.Description, "id", added.ShortID())
 		},
 	}
 	if err := bindAdd(cmd); err != nil {

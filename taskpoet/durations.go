@@ -36,7 +36,7 @@ func parseDuration(s string) (*time.Duration, error) {
 	case "hours", "hour", "hrs", "hr", "h":
 		d := time.Duration(ordinal) * time.Hour
 		return &d, nil
-	case "days", "day", "d", "daily":
+	case daysUnit, "day", "d", "daily":
 		d := time.Duration(ordinal) * (24 * time.Hour)
 		return &d, nil
 	case "weeks", "week", "wks", "wk", "w":

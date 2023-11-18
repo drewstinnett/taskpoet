@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert/v2"
-	"github.com/pterm/pterm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,12 +99,12 @@ func TestBlankDescription(t *testing.T) {
 
 func TestGetByPartialIDWithPath(t *testing.T) {
 	ts := Tasks{
-		{Description: "foo", ID: "again with the fakeid again"},
-		{Description: "foo", ID: "fakeid"},
-		{Description: "foo", ID: "another_fakeid"},
-		{Description: "foo", ID: "dupthing-num-1"},
-		{Description: "foo", ID: "dupthing-num-2"},
-		{Description: "foo"},
+		MustNewTask("foo", WithID("again with the fakeid again")),
+		MustNewTask("foo", WithID("fakeid")),
+		MustNewTask("foo", WithID("another_fakeid")),
+		MustNewTask("foo", WithID("dupthing-num-1")),
+		MustNewTask("foo", WithID("dupthing-num-2")),
+		MustNewTask("foo"),
 	}
 	require.NoError(t, lc.Task.AddSet(ts))
 	task, err := lc.Task.GetWithPartialID("fake", "", "/active")
@@ -185,34 +184,24 @@ func TestDuplicateIDs(t *testing.T) {
 }
 
 func TestGetByExactID(t *testing.T) {
-	ts := Tasks{
-		{Description: "foo", ID: "fakeid-exact"},
-		{Description: "foo", ID: "another_fakeid-exact"},
-		{Description: "foo"},
-	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(
+		Tasks{
+			MustNewTask("foo", WithID("fakeid-exact")),
+			MustNewTask("foo", WithID("another_fakeid-exact")),
+			MustNewTask("foo"),
+		}))
 	activePrefix := "/active"
 	task, err := lc.Task.GetWithID("another_fakeid-exact", "", activePrefix)
-	if err != nil {
-		t.Error(err)
-	} else if task.ID != "another_fakeid-exact" {
-		t.Errorf("Expected to retrieve 'another_fakeid-exact' but got %v", task.ID)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "another_fakeid-exact", task.ID)
 
 	_, err = lc.Task.GetWithID("another", "", activePrefix)
-	if err == nil {
-		t.Error("Did not error when checking for an exact id that does not exist")
-	}
+	require.Error(t, err)
 }
 
 func TestListNonExistant(t *testing.T) {
 	r, err := lc.Task.List("/never-exist")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	if len(r) != 0 {
 		t.Errorf("Did not return an empty list when listing a non existent prefix")
 	}
@@ -457,7 +446,7 @@ func TestGetByPartialID(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
+	// pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
 	ts := Tasks{
 		{Description: "foo", ID: "describe-test"},
 		{Description: "Some parent", ID: "describe-parent"},
@@ -579,25 +568,23 @@ func TestAddOrEditSet(t *testing.T) {
 
 func TestEditExistingValues(t *testing.T) {
 	ts := Tasks{
-		{Description: "Foo", ID: "edit-existing-1"},
+		MustNewTask("Foo", WithID("edit-existing-1")),
 	}
 	require.NoError(t, lc.Task.AddSet(ts))
 
 	aets := []Task{
-		{Description: "Update", ID: "edit-existing-1"},
+		*MustNewTask("Update", WithID("edit-existing-1")),
 	}
-
 	require.NoError(t, lc.Task.AddOrEditSet(aets))
 
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
-
 	assert.Equal(t, false, edited.Added.IsZero())
 }
 
 func TestCompleteIDs(t *testing.T) {
 	p := newTestPoet(t)
-	p.Task.Add(&Task{Description: "This is foo"})
-	p.Task.Add(&Task{Description: "This is bar"})
+	p.Task.Add(MustNewTask("This is foo"))
+	p.Task.Add(MustNewTask("This is bar"))
 	got := p.CompleteIDsWithPrefix("/active", "bar")
 	require.True(t, strings.HasSuffix(got[0], "\tThis is bar"))
 	require.Equal(t, 1, len(got))
@@ -635,16 +622,42 @@ func TestMiscNewWith(t *testing.T) {
 	require.Equal(
 		t,
 		&Task{
+			ID:           "some-id",
 			Description:  "some description",
 			Urgency:      float64(0),
 			EffortImpact: 2,
 			Tags:         []string{"bar", "foo"},
 			Added:        a,
+			PluginID:     "builtin",
 		},
 		MustNewTask("some description",
+			WithID("some-id"),
 			WithEffortImpact(EffortImpactMedium),
 			WithTags([]string{"foo", "bar"}),
 			WithAdded(&a),
 		),
 	)
+}
+
+func TestNewComment(t *testing.T) {
+	got, err := NewComment("")
+	require.Nil(t, got)
+	require.EqualError(t, err, "text must not be empty")
+
+	got, err = NewComment("foo")
+	require.NotNil(t, got)
+	require.NoError(t, err)
+	require.Equal(t, "foo", got.Text)
+
+	task := MustNewTask("this is a test")
+	require.NoError(t, task.AddComment("test comment"))
+	require.Equal(t, 1, len(task.Comments))
+
+	require.Error(t, task.AddComment(""))
+}
+
+func TestDescriptionDetails(t *testing.T) {
+	task := MustNewTask("task with comments")
+	require.NoError(t, task.AddComment("this is a comment"))
+	require.True(t, strings.HasSuffix(task.DescriptionDetails(), "this is a comment"))
 }

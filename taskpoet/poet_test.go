@@ -38,16 +38,12 @@ func TestNew(t *testing.T) {
 }
 
 func TestActiveTable(t *testing.T) {
-	tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
+	p, err := New(WithDatabasePath(mustTempDB(t)))
 	tomorrow := time.Now().AddDate(0, 0, 1)
-	p, err := New(WithDatabasePath(tmpfile.Name()))
 	require.NoError(t, err)
-	_, err = p.Task.Add(&Task{Description: "foo"})
+	_, err = p.Task.Add(MustNewTask("foo"))
 	require.NoError(t, err)
-	_, err = p.Task.Add(&Task{
-		Description: "bar",
-		Due:         &tomorrow,
-	})
+	_, err = p.Task.Add(MustNewTask("bar", WithDue(&tomorrow)))
 	require.NoError(t, err)
 	thing := p.TaskTable(TableOpts{Prefix: "/active"})
 	fmt.Fprintf(os.Stderr, "TABLE: %+v\n", thing)
@@ -57,8 +53,16 @@ func TestActiveTable(t *testing.T) {
 	}), "foo")
 }
 
+func TestDescribeTask(t *testing.T) {
+	p, err := New(WithDatabasePath(mustTempDB(t)))
+	require.NoError(t, err)
+	created, err := p.Task.Add(MustNewTask("test task"))
+	require.NoError(t, err)
+	got := p.DescribeTask(*created)
+	require.Contains(t, got, "test task")
+}
+
 func TestCompletedTable(t *testing.T) {
-	// tmpfile, _ := os.CreateTemp("", "taskpoet.*.db")
 	p, err := New(WithDatabasePath(mustTempDB(t)))
 	require.NoError(t, err)
 	_, err = p.Task.Log(&Task{ID: "log-this-task", Description: "foo"}, &emptyDefaults)

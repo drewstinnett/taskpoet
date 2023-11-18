@@ -220,7 +220,7 @@ var columnMap map[string]func(Task) string = map[string]func(Task) string{
 	"Age": func(t Task) string {
 		return shortDuration(time.Since(t.Added))
 	},
-	descriptionColumnName: func(t Task) string { return t.Description },
+	descriptionColumnName: func(t Task) string { return t.DescriptionDetails() },
 	"Due": func(t Task) string {
 		// return t.DueString()
 		if t.Due != nil {
@@ -319,8 +319,95 @@ func (t taskTable) StyleFunc(row, col int) lipgloss.Style {
 	}
 }
 
+func descDate(d time.Time) string {
+	// c := NewCalendar()
+	return fmt.Sprintf("%v (%v)", d.Format("2006-01-02 15:4"), shortDuration(time.Since(d)*-1))
+}
+
+func descRows(t Task) [][]string {
+	rows := [][]string{
+		{"ID", fmt.Sprintf("%v (%v)", t.ID, t.ShortID())},
+		{"Description", t.DescriptionDetails()},
+		{"Added", descDate(t.Added)},
+	}
+	if t.Due != nil {
+		rows = append(rows, []string{"Due", descDate(*t.Due)})
+	}
+	if len(t.Tags) > 0 {
+		rows = append(rows, []string{"Tags", strings.Join(t.Tags, ",")})
+	}
+	rows = append(rows, []string{
+		"Urgency", fmt.Sprint(t.Urgency),
+	})
+
+	if len(t.Parents) > 0 {
+		rows = append(rows, []string{"Parents", strings.Join(t.Parents, ",")})
+	}
+	if len(t.Children) > 0 {
+		rows = append(rows, []string{"Children", strings.Join(t.Children, ",")})
+	}
+	return rows
+}
+
+// DescribeTask returns a pretty table describing a given task
+func (p *Poet) DescribeTask(t Task) string {
+	p.refresh(Tasks{&t})
+	doc := strings.Builder{}
+	rows := descRows(t)
+	doc.WriteString(table.New().
+		Border(lipgloss.HiddenBorder()).
+		BorderStyle(lipgloss.NewStyle()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == 0 {
+				return p.styling.RowHeader
+			}
+			even := row%2 == 0
+			rowStyle := p.styling.Row
+			if even {
+				rowStyle = p.styling.RowAlt
+			}
+			return rowStyle
+		}).
+		Headers("Name", "Value").
+		Rows(rows...).Render())
+
+	doc.WriteString("\n  Urgency Calculation\n")
+	urg, reasons := p.curator.WeighAndDescribe(t)
+	reasonRows := [][]string{}
+	for _, reason := range reasons {
+		reasonRows = append(reasonRows, []string{
+			reason.Name,
+			fmt.Sprintf("%.2f", reason.Coefficient),
+			"x",
+			fmt.Sprint(reason.Multiplier),
+			reason.Unit,
+			"=",
+			fmt.Sprintf("%.2f", reason.Coefficient*float64(reason.Multiplier)),
+		})
+	}
+	if len(reasonRows) > 0 {
+		eerow := append(make([]string, len(reasonRows[len(reasonRows)-1])-1), fmt.Sprintf("%.2f", urg))
+		reasonRows = append(reasonRows, eerow)
+	}
+	doc.WriteString(table.New().
+		Border(lipgloss.HiddenBorder()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			even := row%2 == 1
+			rowStyle := p.styling.Row
+			if even {
+				rowStyle = p.styling.RowAlt
+			}
+			return rowStyle
+		}).
+		Rows(reasonRows...).Render())
+
+	w, _, _ := term.GetSize(int(os.Stdout.Fd()))
+	maxW := min(w, 180)
+	docStyle = docStyle.MaxWidth(maxW)
+	return docStyle.Render(doc.String())
+}
+
 // TaskTable returns a table of the given tasks
-// func (p *Poet) TaskTable(prefix string, fp FilterParams, filters ...Filter) string {
 func (p *Poet) TaskTable(opts TableOpts) string {
 	p.checkRecurring()
 	tasks := ApplyFilters(p.MustList(opts.Prefix), &opts.FilterParams, opts.Filters...)

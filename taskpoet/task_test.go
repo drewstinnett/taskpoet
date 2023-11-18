@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/assert/v2"
-	"github.com/pterm/pterm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -447,7 +446,7 @@ func TestGetByPartialID(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
+	// pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
 	ts := Tasks{
 		{Description: "foo", ID: "describe-test"},
 		{Description: "Some parent", ID: "describe-parent"},

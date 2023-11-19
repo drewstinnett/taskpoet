@@ -535,7 +535,7 @@ func (svc *TaskServiceOp) GetWithID(id, pluginID, state string) (*Task, error) {
 // Complete marks a task as completed
 func (svc *TaskServiceOp) Complete(t *Task) error {
 	activePath := t.DetectKeyPath()
-	t.Completed = nowPTR()
+	t.Completed = ptr(time.Now())
 	completePath := t.DetectKeyPath()
 	if err := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
 		taskSerial, err := json.Marshal(t)
@@ -580,7 +580,7 @@ func (svc *TaskServiceOp) List(prefix string) (Tasks, error) {
 // Log is a Shortcut utility to add a new task, but a completed time of 'now'
 func (svc *TaskServiceOp) Log(t *Task, d *Task) (*Task, error) {
 	if t.Completed == nil {
-		t.Completed = nowPTR()
+		t.Completed = ptr(time.Now())
 	}
 	return svc.Add(t)
 }

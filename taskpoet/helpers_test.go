@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseDuration(t *testing.T) {
@@ -12,54 +13,30 @@ func TestParseDuration(t *testing.T) {
 		duration string
 		seconds  float64
 	}{
-		{"0", 0},
-		{"2h", 7200},
-		{"-2h", -7200},
-		{".5h", 1800},
-		{"02h", 7200},
-		{"24h", 86400},
-		{"1d", 86400},
-		{"2h30m", 9000},
+		{duration: "0", seconds: 0},
+		{duration: "2h", seconds: 7200},
+		{duration: "-2h", seconds: -7200},
+		{duration: ".5h", seconds: 1800},
+		{duration: "02h", seconds: 7200},
+		{duration: "24h", seconds: 86400},
+		{duration: "1d", seconds: 86400},
+		{duration: "2h30m", seconds: 9000},
 	}
 
 	for _, test := range tests {
 		dur, _ := taskpoet.ParseDuration(test.duration)
-		if dur.Seconds() != test.seconds {
-			t.Errorf("Expected %v seconds from duration %v...but got %v", test.seconds, test.duration, dur.Seconds())
-		}
+		require.Equal(t, test.seconds, dur.Seconds())
 	}
 }
 
 func TestParseInvalidDuration(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		duration string
-	}{
-		{""},
-		{"5"},
-		{".ah"},
-		{".s"},
-		{"-.s"},
-	}
-
-	for _, test := range tests {
-		_, err := taskpoet.ParseDuration(test.duration)
-		if err == nil {
-			t.Errorf("Did not return an error when parsing the invalid duration: '%v'", test.duration)
-		}
+	for _, tt := range []string{"", "5", ".ah", ".s", "-.s"} {
+		_, err := taskpoet.ParseDuration(tt)
+		require.Error(t, err)
 	}
 }
 
 func TestUniqueSlices(t *testing.T) {
-	t.Parallel()
-	nodups := []string{"a", "b", "c"}
-	dups := []string{"c", "b", "c"}
-
-	if !taskpoet.CheckUniqueStringSlice(nodups) {
-		t.Error("Checking slice with no duplicates detected duplicates")
-	}
-
-	if taskpoet.CheckUniqueStringSlice(dups) {
-		t.Error("Checking a slice with dups did not detect dups")
-	}
+	require.True(t, taskpoet.CheckUniqueStringSlice([]string{"a", "b", "c"}))
+	require.False(t, taskpoet.CheckUniqueStringSlice([]string{"c", "b", "c"}))
 }

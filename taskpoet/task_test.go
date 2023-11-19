@@ -113,15 +113,11 @@ func TestGetByPartialIDWithPath(t *testing.T) {
 
 	// Test for a non-unique partial
 	_, err = lc.Task.GetWithPartialID("dupthing", "", "/active")
-	if err == nil {
-		t.Error("Tried to get a partial that has duplicates, but got no error")
-	}
+	require.Error(t, err)
 
 	// Test for a non existent prefix
 	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
-	if err == nil {
-		t.Error("Tried to match on a non existent partial id, but did not error")
-	}
+	require.Error(t, err)
 }
 
 func TestDefaults(t *testing.T) {
@@ -139,29 +135,20 @@ func TestDefaults(t *testing.T) {
 	require.EqualValues(t, &duration, task.Due)
 }
 
-// func TestGetByID(t *testing.T) {
 func TestGetByExactPath(t *testing.T) {
-	ts := Tasks{
-		{Description: "foo", ID: "id-stay-active"},
-	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
-	_, err = lc.Task.GetWithID("id-stay-active", "", "")
-	if err != nil {
-		t.Errorf("Could not GetWithID for id-stay-active")
-	}
+	require.NoError(t, lc.Task.AddSet(
+		Tasks{
+			MustNewTask("foo", WithID("id-stay-active")),
+		},
+	))
+	_, err := lc.Task.GetWithID("id-stay-active", "", "")
+	require.NoError(t, err)
 
 	// Check completed
 	_, err = lc.Task.Log(&Task{ID: "id-in-completed", Description: "foo"}, &emptyDefaults)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	_, err = lc.Task.GetWithID("id-in-completed", "", "")
-	if err != nil {
-		t.Errorf("Could not GetByID for id-in-completed")
-	}
+	require.NoError(t, err)
 }
 
 func TestDuplicateIDs(t *testing.T) {
@@ -202,9 +189,7 @@ func TestGetByExactID(t *testing.T) {
 func TestListNonExistant(t *testing.T) {
 	r, err := lc.Task.List("/never-exist")
 	require.NoError(t, err)
-	if len(r) != 0 {
-		t.Errorf("Did not return an empty list when listing a non existent prefix")
-	}
+	require.Equal(t, 0, len(r))
 }
 
 func TestAddParent(t *testing.T) {
@@ -213,16 +198,13 @@ func TestAddParent(t *testing.T) {
 		{ID: "parent", Description: "Parent task"},
 	}
 
-	err := lc.Task.AddSet(tasks)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.AddSet(tasks))
 	kid, _ := lc.Task.GetWithID("kid", "", "/active")
 	parent, _ := lc.Task.GetWithID("parent", "", "/active")
 
 	// Make sure adding a parent works
 	kid.Parents = append(kid.Parents, parent.ID)
-	_, err = lc.Task.Edit(kid)
+	_, err := lc.Task.Edit(kid)
 	require.NoError(t, err)
 
 	// Make sure you can't add the same parent multiple times
@@ -259,190 +241,129 @@ func TestTaskDuplicateParents(t *testing.T) {
 }
 
 func TestShortID(t *testing.T) {
-	tasks := Tasks{
-		{ID: "a", Description: "Short ID"},
-		{ID: "foo-bar-baz-bazinga", Description: "Long ID"},
-	}
-	lc.Task.AddSet(tasks)
-	short, _ := lc.Task.GetWithID("a", "", "/active")
-	long, _ := lc.Task.GetWithID("foo-bar-baz-bazinga", "", "/active")
-
-	if short.ShortID() != "a" {
-		t.Errorf("Short ID for %v did not return 'a'", short.ID)
-	}
-	if long.ShortID() != "foo-b" {
-		t.Errorf("Short ID for %v did not return 'foo-b'", long.ID)
-	}
+	lc.Task.AddSet(Tasks{
+		MustNewTask("Short ID", WithID("a")),
+		MustNewTask("Long ID", WithID("foo-bar-baz-bazinga")),
+	})
+	require.Equal(t, "a", lc.MustGet("a").ShortID())
+	require.Equal(t, "foo-b", lc.MustGet("foo-bar-baz-bazinga").ShortID())
 }
 
 func TestEditNonExisting(t *testing.T) {
-	task := &Task{ID: "non-existing-edit"}
-	_, err := lc.Task.Edit(task)
-	if err == nil {
-		t.Error("No error on editing a non existent task")
-	}
+	got, err := lc.Task.Edit(&Task{ID: "non-existing-edit"})
+	require.Nil(t, got)
+	require.EqualError(t, err, "cannot edit a task that did not previously exist: non-existing-edit")
 }
 
 func TestEditInvalid(t *testing.T) {
-	task, err := NewTask("foo",
-		WithID("soon-to-be-valid"),
-	)
-	require.NoError(t, err)
-	_, aerr := lc.Task.Add(task)
+	p := newTestPoet(t)
+	task := MustNewTask("foo", WithID("soon-to-be-valid"))
+	_, aerr := p.Task.Add(task)
 	require.NoError(t, aerr)
 
 	task.Description = ""
-	_, err = lc.Task.Edit(task)
-	if err == nil {
-		t.Error("Did not error when editing a task in to an invalid state")
-	}
+	_, err := p.Task.Edit(task)
+	require.EqualError(t, err, "missing description for Task")
 }
 
 func TestEditCompletedInvalid(t *testing.T) {
+	p := newTestPoet(t)
 	task := &Task{ID: "test-completed-edit", Description: "foo"}
-	_, err := lc.Task.Add(task)
-	if err != nil {
-		t.Error(err)
-	}
+	_, err := p.Task.Add(task)
+	require.NoError(t, err)
 
-	n := time.Now()
-	task.Completed = &n
-	_, err = lc.Task.Edit(task)
-	if err == nil {
-		t.Error("Did not error when editing a task and changing the Completed field")
-	}
+	task.Completed = ptr(time.Now())
+	_, err = p.Task.Edit(task)
+	require.EqualError(t, err, "cannot edit a task that did not previously exist: test-completed-edit")
 }
 
 func TestEditDescription(t *testing.T) {
-	task := &Task{ID: "test-edit-description", Description: "original"}
+	task := MustNewTask("original", WithID("test-edit-description"))
 	_, err := lc.Task.Add(task)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	task.Description = "New"
 	edited, err := lc.Task.Edit(task)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if edited.Description != "New" {
-		t.Error("Failed editing new description in Task")
-	}
+	require.NoError(t, err)
+	require.Equal(t, "New", edited.Description)
 }
 
 func TestEditSet(t *testing.T) {
-	ts := Tasks{
-		{Description: "Foo", ID: "edit-set-1"},
-		{Description: "Bar", ID: "edit-set-2"},
+	require.NoError(t, lc.Task.AddSet(Tasks{
+		MustNewTask("Foo", WithID("edit-set-1")),
+		MustNewTask("Bar", WithID("edit-set-2")),
+	}))
+
+	test2 := lc.MustGet("edit-set-2")
+	editSet := []Task{
+		*lc.MustGet("edit-set-1"),
+		*test2,
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
-
-	test1, _ := lc.Task.GetWithID("edit-set-1", "", "/active")
-	test2, _ := lc.Task.GetWithID("edit-set-2", "", "/active")
-
-	editSet := []Task{*test1, *test2}
-
 	test2.Description = "New Description"
-	err = lc.Task.EditSet(editSet)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, lc.Task.EditSet(editSet))
 }
 
 func TestAddParentFunc(t *testing.T) {
-	tasks := Tasks{
-		{ID: "kid-func", Description: "Kid task"},
-		{ID: "parent-func", Description: "Parent task"},
-	}
-
-	require.NoError(t, lc.Task.AddSet(tasks))
-
-	// Get newly created items
-	kid, _ := lc.Task.GetWithID("kid-func", "", "/active")
-	parent, _ := lc.Task.GetWithID("parent-func", "", "/active")
+	require.NoError(t, lc.Task.AddSet(Tasks{
+		MustNewTask("Kid task", WithID("kid-func")),
+		MustNewTask("Parent task", WithID("parent-func")),
+	}))
 
 	// Make sure adding a parent works
-	require.NoError(t, lc.Task.AddParent(kid, parent))
+	require.NoError(t, lc.Task.AddParent(
+		lc.MustGet("kid-func"),
+		lc.MustGet("parent-func"),
+	))
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetWithID("kid-func", "", "/active")
-	parent, _ = lc.Task.GetWithID("parent-func", "", "/active")
+	kid := lc.MustGet("kid-func")
+	parent := lc.MustGet("parent-func")
 
-	if !containsString(kid.Parents, parent.ID) {
-		t.Error("Setting parent via functiono did not work")
-	}
-
-	if !containsString(parent.Children, kid.ID) {
-		t.Error("Setting parent did not also set child on parent resource")
-	}
+	require.Contains(t, kid.Parents, parent.ID)
+	require.Contains(t, parent.Children, kid.ID)
 }
 
 func TestAddChildFunc(t *testing.T) {
-	tasks := Tasks{
-		{ID: "kid-func2", Description: "Kid task"},
-		{ID: "parent-func2", Description: "Parent task"},
-	}
+	p := newTestPoet(t)
 
-	err := lc.Task.AddSet(tasks)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// Get newly created items
-	kid, _ := lc.Task.GetWithID("kid-func2", "", "/active")
-	parent, _ := lc.Task.GetWithID("parent-func2", "", "/active")
+	require.NoError(t, p.Task.AddSet(
+		Tasks{
+			MustNewTask("Kid task", WithID("kid-func2")),
+			MustNewTask("Parent task", WithID("parent-func2")),
+		}))
 
 	// Make sure adding a parent works
-	err = lc.Task.AddChild(parent, kid)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, p.Task.AddChild(
+		p.MustGet("parent-func2"),
+		p.MustGet("kid-func2"),
+	))
 
 	// Get newly Editted
-	kid, _ = lc.Task.GetWithID("kid-func2", "", "/active")
-	parent, _ = lc.Task.GetWithID("parent-func2", "", "/active")
-
-	if !containsString(kid.Parents, parent.ID) {
-		t.Error("Setting parent via functiono did not work")
-	}
-
-	if !containsString(parent.Children, kid.ID) {
-		t.Error("Setting parent did not also set child on parent resource")
-	}
+	kid := p.MustGet("kid-func2")
+	parent := p.MustGet("parent-func2")
+	require.Contains(t, kid.Parents, parent.ID)
+	require.Contains(t, parent.Children, kid.ID)
 }
 
 func TestGetByPartialID(t *testing.T) {
+	p := newTestPoet(t)
 	ts := Tasks{
 		{Description: "foo", ID: "partial-id-test"},
 		{Description: "foo", ID: "partial-id-test-2"},
 		{Description: "foo", ID: "unique-partial-id-test-2"},
 	}
-	err := lc.Task.AddSet(ts)
-	if err != nil {
-		t.Error(err)
-	}
-	task, err := lc.Task.GetWithPartialID("partial-id-test-2", "", "")
-	if err != nil {
-		t.Error(err)
-	} else if task.ID != "partial-id-test-2" {
-		t.Errorf("Expected to retrieve 'partial-id-test-2' but got %v", task.ID)
-	}
+	require.NoError(t, p.Task.AddSet(ts))
+	task, err := p.Task.GetWithPartialID("partial-id-test-2", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "partial-id-test-2", task.ID)
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetWithPartialID("partial-id", "", "")
-	if err == nil {
-		t.Error("Tried to get a partial that has duplicates, but got no error")
-	}
+	_, err = p.Task.GetWithPartialID("partial-id", "", "")
+	require.EqualError(t, err, "more than 1 match for partial-id found in [], please try using more of the ID. Returned: [/active/builtin/partial-id-test /active/builtin/partial-id-test-2]")
 
 	// Test for a non existent prefix
-	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
-	if err == nil {
-		t.Error("Tried to match on a non existent partial id, but did not error")
-	}
+	_, err = p.Task.GetWithPartialID("this-will-never-exist", "", "/active")
+	require.EqualError(t, err, "no matches for this-will-never-exist found in []")
 }
 
 func TestDescribe(t *testing.T) {
@@ -528,11 +449,11 @@ func TestDetectKeyPath(t *testing.T) {
 			wanted: "/active/plugin-1/foo",
 		},
 		{
-			task:   Task{ID: "foo", Description: "bar", Deleted: nowPTR()},
+			task:   Task{ID: "foo", Description: "bar", Deleted: ptr(time.Now())},
 			wanted: "/deleted/builtin/foo",
 		},
 		{
-			task:   Task{ID: "foo", Description: "bar", Completed: nowPTR()},
+			task:   Task{ID: "foo", Description: "bar", Completed: ptr(time.Now())},
 			wanted: "/completed/builtin/foo",
 		},
 	}

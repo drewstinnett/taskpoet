@@ -558,10 +558,24 @@ func (p *Poet) exists(t *Task) bool {
 	return err == nil
 }
 
+// Get return a task and error from an ID string
+func (p *Poet) Get(id string) (*Task, error) {
+	return p.Task.GetWithID(id, "", "active")
+}
+
+// MustGet returns a task from an ID string or panics
+func (p *Poet) MustGet(id string) *Task {
+	got, err := p.Task.GetWithID(id, "", "/active")
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
 // Delete marks a task as deleted
 func (p *Poet) Delete(t *Task) error {
 	curPath := t.DetectKeyPath()
-	t.Deleted = nowPTR()
+	t.Deleted = ptr(time.Now())
 	newPath := t.DetectKeyPath()
 	if err := p.DB.Update(func(tx *bolt.Tx) error {
 		taskSerial, err := json.Marshal(t)

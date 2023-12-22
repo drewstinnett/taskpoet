@@ -76,10 +76,20 @@ func TestCompletedTable(t *testing.T) {
 	}), "foo")
 }
 
-func newTestPoet(t *testing.T) *Poet {
-	return MustNew(
+func newTestPoet(t *testing.T, tasks ...Task) *Poet {
+	p := MustNew(
 		WithDatabasePath(mustTempDB(t)),
 	)
+	ts := make(Tasks, len(tasks))
+	for idx, task := range tasks {
+		task := task
+		ts[idx] = &task
+	}
+	err := p.Task.AddSet(ts)
+	if err != nil {
+		panic(err)
+	}
+	return p
 }
 
 func TestDelete(t *testing.T) {

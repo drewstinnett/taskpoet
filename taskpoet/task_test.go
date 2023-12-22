@@ -1,7 +1,6 @@
 package taskpoet
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -20,15 +19,6 @@ var (
 	testDBPath    string
 )
 
-/*
-func newTestPoet(t *testing.T) (*Poet, string) {
-	dbPath := path.Join(t.TempDir(), "testtaskpoet.db")
-	p, err := New(WithDatabasePath(dbPath))
-	panicIfErr(err)
-	return p, testDBPath
-}
-*/
-
 func setup() {
 	// Init a db
 	tmpfile, err := os.CreateTemp("", "taskpoet.*.db")
@@ -45,10 +35,7 @@ func setup() {
 }
 
 func shutdown() {
-	err := os.Remove(testDBPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not remove:%v ", testDBPath)
-	}
+	panicIfErr(os.Remove(testDBPath))
 }
 
 func TestMain(m *testing.M) {
@@ -59,11 +46,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestIDSlash(t *testing.T) {
-	/*
-		//task:  Task{ID: "foo/bar", Description: "Invalid-id"},
-		task:  Task{ID: "foo/bar", Description: "Invalid-id"},
-		valid: false,
-	*/
 	_, err := NewTask("foo", WithID("foo/bar"))
 	require.EqualError(t, err, "ID Cannot contain a slash (/)")
 }
@@ -98,25 +80,24 @@ func TestBlankDescription(t *testing.T) {
 }
 
 func TestGetByPartialIDWithPath(t *testing.T) {
-	ts := Tasks{
-		MustNewTask("foo", WithID("again with the fakeid again")),
-		MustNewTask("foo", WithID("fakeid")),
-		MustNewTask("foo", WithID("another_fakeid")),
-		MustNewTask("foo", WithID("dupthing-num-1")),
-		MustNewTask("foo", WithID("dupthing-num-2")),
-		MustNewTask("foo"),
-	}
-	require.NoError(t, lc.Task.AddSet(ts))
-	task, err := lc.Task.GetWithPartialID("fake", "", "/active")
+	p := newTestPoet(t,
+		*MustNewTask("foo", WithID("again with the fakeid again")),
+		*MustNewTask("foo", WithID("fakeid")),
+		*MustNewTask("foo", WithID("another_fakeid")),
+		*MustNewTask("foo", WithID("dupthing-num-1")),
+		*MustNewTask("foo", WithID("dupthing-num-2")),
+		*MustNewTask("foo"),
+	)
+	task, err := p.Task.GetWithPartialID("fake", "", "/active")
 	require.NoError(t, err)
 	require.Equal(t, "fakeid", task.ID)
 
 	// Test for a non-unique partial
-	_, err = lc.Task.GetWithPartialID("dupthing", "", "/active")
+	_, err = p.Task.GetWithPartialID("dupthing", "", "/active")
 	require.Error(t, err)
 
 	// Test for a non existent prefix
-	_, err = lc.Task.GetWithPartialID("this-will-never-exist", "", "/active")
+	_, err = p.Task.GetWithPartialID("this-will-never-exist", "", "/active")
 	require.Error(t, err)
 }
 
@@ -125,10 +106,7 @@ func TestDefaults(t *testing.T) {
 	fakeDuration, _ := ParseDuration("2h")
 	duration := time.Now().Add(fakeDuration)
 
-	p, err := New(
-		WithDatabasePath(mustTempDB(t)),
-	)
-	require.NoError(t, err)
+	p := newTestPoet(t)
 	p.Default = Task{Due: &duration}
 
 	task, _ := p.Task.Add(&Task{Description: "foo"})
@@ -347,12 +325,11 @@ func TestAddChildFunc(t *testing.T) {
 
 func TestGetByPartialID(t *testing.T) {
 	p := newTestPoet(t)
-	ts := Tasks{
-		{Description: "foo", ID: "partial-id-test"},
-		{Description: "foo", ID: "partial-id-test-2"},
-		{Description: "foo", ID: "unique-partial-id-test-2"},
-	}
-	require.NoError(t, p.Task.AddSet(ts))
+	require.NoError(t, p.Task.AddSet(Tasks{
+		MustNewTask("foo", WithID("partial-id-test")),
+		MustNewTask("foo", WithID("partial-id-test-2")),
+		MustNewTask("foo", WithID("unique-partial-id-test-2")),
+	}))
 	task, err := p.Task.GetWithPartialID("partial-id-test-2", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "partial-id-test-2", task.ID)
@@ -367,34 +344,29 @@ func TestGetByPartialID(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	// pterm.SetDefaultOutput(os.NewFile(0, os.DevNull))
-	ts := Tasks{
-		{Description: "foo", ID: "describe-test"},
-		{Description: "Some parent", ID: "describe-parent"},
-	}
-	lc.Task.AddSet(ts)
-	task, _ := lc.Task.GetWithID("describe-test", "builtin", "/active")
-	taskP, _ := lc.Task.GetWithID("describe-parent", "builtin", "/active")
-	lc.DescribeTask(*task)
+	p := newTestPoet(t,
+		*MustNewTask("foo", WithID("describe-test")),
+		*MustNewTask("Some parent", WithID("describe-parent")))
+	// p.Task.AddSet(ts)
+	task := p.MustGet("describe-test")
+	taskP := p.MustGet("describe-parent")
+	require.NotEmpty(t, p.DescribeTask(*task))
 
 	// Describe with parent test
-	lc.Task.AddParent(task, taskP)
-	task, err := lc.Task.Edit(task)
+	require.NoError(t, p.Task.AddParent(task, taskP))
+	task, err := p.Task.Edit(task)
 	require.NoError(t, err)
-	lc.DescribeTask(*task)
+	require.NotEmpty(t, p.DescribeTask(*task))
 
 	// Describe with parent test
-	taskP, err = lc.Task.GetWithID("describe-parent", "builtin", "/active")
-	require.NoError(t, err)
-
-	lc.DescribeTask(*taskP)
+	require.NotEmpty(t, p.DescribeTask(*p.MustGet("describe-parent")))
 
 	// Describe a task with more things set
 	n := time.Now()
 	wait := n.Add(time.Hour * 1)
 	due := n.Add(time.Hour * 24)
 	completed := n.Add(time.Hour * 12)
-	lc.DescribeTask(Task{
+	p.DescribeTask(Task{
 		ID:          "describe-descriptive",
 		Description: "foo",
 		Due:         &due,
@@ -430,9 +402,7 @@ func TestPurgeTask(t *testing.T) {
 	require.NoError(t, lc.Task.Purge(added))
 
 	_, err = lc.Task.GetWithID("delete-me", "", "")
-	if err == nil {
-		t.Error("Got task we should have deleted")
-	}
+	require.EqualError(t, err, "could not find that task at any of [/active/builtin/delete-me /completed/builtin/delete-me /deleted/builtin/delete-me]")
 }
 
 func TestDetectKeyPath(t *testing.T) {
@@ -459,8 +429,7 @@ func TestDetectKeyPath(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got := string(test.task.DetectKeyPath())
-		require.Equal(t, test.wanted, got)
+		require.Equal(t, test.wanted, string(test.task.DetectKeyPath()))
 	}
 }
 
@@ -484,24 +453,24 @@ func TestAddOrEditSet(t *testing.T) {
 }
 
 func TestEditExistingValues(t *testing.T) {
-	ts := Tasks{
-		MustNewTask("Foo", WithID("edit-existing-1")),
-	}
-	require.NoError(t, lc.Task.AddSet(ts))
+	require.NoError(t, lc.Task.AddSet(
+		Tasks{
+			MustNewTask("Foo", WithID("edit-existing-1")),
+		},
+	))
 
-	aets := []Task{
-		*MustNewTask("Update", WithID("edit-existing-1")),
-	}
-	require.NoError(t, lc.Task.AddOrEditSet(aets))
+	require.NoError(t, lc.Task.AddOrEditSet(
+		[]Task{
+			*MustNewTask("Update", WithID("edit-existing-1")),
+		},
+	))
 
 	edited, _ := lc.Task.GetWithID("edit-existing-1", "", "")
 	assert.Equal(t, false, edited.Added.IsZero())
 }
 
 func TestCompleteIDs(t *testing.T) {
-	p := newTestPoet(t)
-	p.Task.Add(MustNewTask("This is foo"))
-	p.Task.Add(MustNewTask("This is bar"))
+	p := newTestPoet(t, *MustNewTask("This is foo"), *MustNewTask("This is bar"))
 	got := p.CompleteIDsWithPrefix("/active", "bar")
 	require.True(t, strings.HasSuffix(got[0], "\tThis is bar"))
 	require.Equal(t, 1, len(got))
@@ -526,7 +495,7 @@ func TestTaskTable(t *testing.T) {
 func TestUrgency(t *testing.T) {
 	p := newTestPoet(t)
 	got, err := p.Task.Add(MustNewTask("something in the past",
-		WithDue(datePTR(time.Now().Add(-24*time.Hour)))),
+		WithDue(ptr(time.Now().Add(-24*time.Hour)))),
 	)
 	require.NoError(t, err)
 	require.Greater(t, got.Urgency, float64(0))

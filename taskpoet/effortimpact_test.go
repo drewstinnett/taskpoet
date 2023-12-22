@@ -7,7 +7,6 @@ import (
 )
 
 func TestPriorityStrings(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		given  EffortImpact
 		expect string

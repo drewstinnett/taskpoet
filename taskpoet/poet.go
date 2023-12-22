@@ -596,3 +596,26 @@ func (p *Poet) Delete(t *Task) error {
 func (p Poet) getBucket(tx *bolt.Tx) *bolt.Bucket {
 	return tx.Bucket(p.bucket)
 }
+
+// AddStream adds a new task using a channel of tasks
+func (p Poet) AddStream(ch <-chan Task) error {
+	for t := range ch {
+		t := t
+		t.setDefaults(&p.Default)
+		// Does this already exist??
+		if !p.exists(&t) {
+			t.Urgency = p.curator.Weigh(t)
+
+			if uerr := p.DB.Update(func(tx *bolt.Tx) error {
+				if perr := p.getBucket(tx).Put(t.DetectKeyPath(), t.MustSerialize()); perr != nil {
+					return perr
+				}
+				return nil
+			}); uerr != nil {
+				return uerr
+			}
+		}
+	}
+
+	return nil
+}

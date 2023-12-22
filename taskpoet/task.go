@@ -133,6 +133,20 @@ func (t *Task) setDefaults(d *Task) {
 	}
 }
 
+// MustSerialize returns the serialization or panics
+func (t Task) MustSerialize() []byte {
+	got, err := t.Serialize()
+	if err != nil {
+		panic(err)
+	}
+	return got
+}
+
+// Serialize returns a byte array representation of the Task
+func (t Task) Serialize() ([]byte, error) {
+	return json.Marshal(t)
+}
+
 // ShortID is just the first 5 characters of the ID
 func (t *Task) ShortID() string {
 	return t.ID[0:min(len(t.ID), 5)]
@@ -600,22 +614,15 @@ func (svc *TaskServiceOp) AddSet(t Tasks) error {
 func (svc *TaskServiceOp) Add(t *Task) (*Task, error) {
 	// t is the new task
 	t.setDefaults(&svc.localClient.Default)
-
-	// Assign a weight/urgency
-	t.Urgency = svc.localClient.curator.Weigh(*t)
-
 	// Does this already exist??
 	if svc.localClient.exists(t) {
 		return nil, errExists
 	}
 
-	taskSerial, err := json.Marshal(t)
-	if err != nil {
-		return nil, err
-	}
+	t.Urgency = svc.localClient.curator.Weigh(*t)
 
 	if uerr := svc.localClient.DB.Update(func(tx *bolt.Tx) error {
-		if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), taskSerial); perr != nil {
+		if perr := svc.localClient.getBucket(tx).Put(t.DetectKeyPath(), t.MustSerialize()); perr != nil {
 			return perr
 		}
 		return nil

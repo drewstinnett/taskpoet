@@ -141,8 +141,10 @@ func TestCalendarMonth(t *testing.T) {
 }
 
 func TestCalendarWeekday(t *testing.T) {
-	present := time.Date(2023, 10, 10, 8, 0, 0, 42, time.Local) // This is a Tuesday
-	cal := NewCalendar(WithPresent(&present))
+	cal := NewCalendar(WithPresent(
+		ptr(time.Date(2023, 10, 10, 8, 0, 0, 42, time.Local)), // This is a Tuesday
+
+	))
 
 	tests := map[string]struct {
 		given    string

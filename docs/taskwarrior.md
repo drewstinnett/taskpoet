@@ -5,10 +5,40 @@ keeps everything TaskWarrior knows about a task.
 
 ## Importing
 
-The easiest way is to let TaskPoet run TaskWarrior for you:
+### From an export file
+
+If you already have an export, or Taskwarrior lives on a different machine,
+you don't need Taskwarrior installed here at all. On the machine that has it:
 
 ```console
-$ taskpoet import taskwarrior --from-task
+$ task export > tw.json
+```
+
+Then, wherever TaskPoet is:
+
+```console
+$ taskpoet import tw.json
+```
+
+Use `-` to read from stdin instead, so it works in a pipe:
+
+```console
+$ ssh other-machine task export | taskpoet import -
+```
+
+The file can be a JSON array (what `task export` prints), one JSON object per
+line, or several of those one after the other. UTF-8 with or without a byte
+order mark and UTF-16 are all fine, so an export saved by Windows PowerShell
+(`task export > tw.json`) works too.
+
+`taskpoet import taskwarrior tw.json` is the same thing, spelled out.
+
+### Straight from Taskwarrior
+
+If Taskwarrior is installed here, let TaskPoet run it for you:
+
+```console
+$ taskpoet import --from-task
 ```
 
 This runs `task export` once for each of `pending`, `waiting`, `completed`,
@@ -16,27 +46,22 @@ This runs `task export` once for each of `pending`, `waiting`, `completed`,
 TaskWarrior you have. It honors your `TASKRC` and `TASKDATA` settings, and
 `--task-bin` points it at a different `task` binary.
 
-Or make the export yourself and import the file (`-` reads from stdin):
-
-```console
-$ task export > tw.json
-$ taskpoet import taskwarrior tw.json
-```
-
-The file can be a JSON array (what `task export` prints), one JSON object per
-line, or several of those one after the other.
+A plain `task export` should include everything too. If the counts you get
+(see below) come up short of what `task count` says, use `--from-task`, which
+asks for each status by name.
 
 ### Check before you commit
 
 ```console
-$ taskpoet import taskwarrior --from-task --dry-run
+$ taskpoet import --from-task --dry-run
 Dry run, no tasks were written.
 Read 1873 tasks from Taskwarrior [completed 1410 deleted 212 pending 236 recurring 15]
 Would import 1873 new tasks, 0 overwritten, 0 already present and skipped
 ```
 
 Compare those numbers with `task count status:pending` (and `completed`,
-`deleted`, `recurring`). Then run it again without `--dry-run`.
+`deleted`, `recurring`). Then run it again without `--dry-run`. This works the
+same with an export file: `taskpoet import tw.json --dry-run`.
 
 ### Importing again
 

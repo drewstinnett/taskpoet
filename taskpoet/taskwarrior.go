@@ -2,6 +2,7 @@ package taskpoet
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // twTimeLayout is the format that Taskwarrior uses for timestamps
@@ -66,7 +68,11 @@ func ParseTaskWarrior(r io.Reader, opts ParseOptions) (*ParseResult, error) {
 		seen: map[string]bool{},
 	}
 
-	dec := json.NewDecoder(r)
+	text, err := utf8Text(r)
+	if err != nil {
+		return nil, fmt.Errorf("reading Taskwarrior export: %w", err)
+	}
+	dec := json.NewDecoder(text)
 	for dec.More() {
 		var top json.RawMessage
 		if err := dec.Decode(&top); err != nil {
@@ -137,6 +143,39 @@ func (p *twParser) record(raw json.RawMessage) error {
 	p.seen[t.UUID] = true
 	p.res.Tasks = append(p.res.Tasks, t)
 	return nil
+}
+
+// utf8Text turns what was read into plain UTF-8, whatever it was saved as. An
+// export made with 'task export > file' in Windows PowerShell is UTF-16, and
+// editors like to add a byte order mark, neither of which JSON allows.
+func utf8Text(r io.Reader) (io.Reader, error) {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case bytes.HasPrefix(b, []byte{0xEF, 0xBB, 0xBF}):
+		b = b[3:]
+	case bytes.HasPrefix(b, []byte{0xFF, 0xFE}):
+		b = utf16ToUTF8(b[2:], binary.LittleEndian)
+	case bytes.HasPrefix(b, []byte{0xFE, 0xFF}):
+		b = utf16ToUTF8(b[2:], binary.BigEndian)
+	// No byte order mark, but JSON starts with an ASCII character, so a zero
+	// byte next to it gives the encoding away
+	case len(b) >= 2 && b[0] != 0 && b[1] == 0:
+		b = utf16ToUTF8(b, binary.LittleEndian)
+	case len(b) >= 2 && b[0] == 0 && b[1] != 0:
+		b = utf16ToUTF8(b, binary.BigEndian)
+	}
+	return bytes.NewReader(b), nil
+}
+
+func utf16ToUTF8(b []byte, order binary.ByteOrder) []byte {
+	units := make([]uint16, len(b)/2)
+	for i := range units {
+		units[i] = order.Uint16(b[2*i:])
+	}
+	return []byte(string(utf16.Decode(units)))
 }
 
 func firstByte(b []byte) byte {

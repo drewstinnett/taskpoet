@@ -2,7 +2,9 @@
 
 Version 2 is a deliberate break, so the storage and the task model could be
 redone properly. There is no migration of a v0.x database. Bring your tasks over
-from TaskWarrior instead, see [Coming from TaskWarrior](taskwarrior.md).
+from TaskWarrior instead, see [Coming from TaskWarrior](taskwarrior.md). If you
+used `taskpoet import tw.json` before, that still works, and now brings in
+everything.
 
 ## What changed
 

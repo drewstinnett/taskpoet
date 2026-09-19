@@ -14,12 +14,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newImportCmd is the parent of the importers
+// newImportCmd is the parent of the importers. Taskwarrior is the only source
+// there is, so 'taskpoet import FILE' is a shorthand for 'import taskwarrior FILE'.
 func newImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import",
+		Use:   "import [FILE]",
 		Short: "Import tasks from another tool",
+		Long: `Import tasks from Taskwarrior. This is the same as 'taskpoet import taskwarrior',
+see 'taskpoet import taskwarrior --help' for the details.
+
+If you have an export of your Taskwarrior tasks, give the file:
+
+$ taskpoet import tw.json
+
+or use - to read it from stdin:
+
+$ task export | taskpoet import -`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && !mustGetCmd[bool](cmd, "from-task") {
+				return cmd.Help()
+			}
+			return importTaskwarrior(cmd, args)
+		},
 	}
+	bindImportFlags(cmd)
 	cmd.AddCommand(newImportTaskwarriorCmd())
 	return cmd
 }
@@ -50,40 +69,49 @@ $ taskpoet import taskwarrior --from-task --dry-run`,
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fromTask := mustGetCmd[bool](cmd, "from-task")
-			if fromTask == (len(args) > 0) {
-				return errors.New("give either a FILE (or - for stdin), or --from-task")
-			}
-			raw, err := readTaskWarrior(cmd, args, fromTask)
-			if err != nil {
-				return err
-			}
-
-			parsed, err := taskpoet.ParseTaskWarrior(bytes.NewReader(raw), taskpoet.ParseOptions{
-				SkipInvalid: mustGetCmd[bool](cmd, "skip-invalid"),
-			})
-			if err != nil {
-				return err
-			}
-
-			rep, err := mustPoet().Store.ImportTasks(parsed.Tasks, taskpoet.ImportOptions{
-				Overwrite: mustGetCmd[bool](cmd, "overwrite"),
-				DryRun:    mustGetCmd[bool](cmd, "dry-run"),
-			})
-			if err != nil {
-				return err
-			}
-			printImportReport(rep, parsed)
-			return nil
-		},
+		RunE: importTaskwarrior,
 	}
+	bindImportFlags(cmd)
+	return cmd
+}
+
+// bindImportFlags adds the flags shared by the import commands
+func bindImportFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("from-task", false, "Run Taskwarrior to get the tasks, instead of reading a file")
 	cmd.Flags().String("task-bin", "task", "Taskwarrior binary to run for --from-task")
 	cmd.Flags().Bool("dry-run", false, "Show what would be imported, without writing anything")
 	cmd.Flags().Bool("overwrite", false, "Replace tasks that were already imported, instead of skipping them")
 	cmd.Flags().Bool("skip-invalid", false, "Skip records that can't be converted, instead of stopping")
-	return cmd
+}
+
+// importTaskwarrior reads a Taskwarrior export, from a file, stdin or by
+// running Taskwarrior, and imports it
+func importTaskwarrior(cmd *cobra.Command, args []string) error {
+	fromTask := mustGetCmd[bool](cmd, "from-task")
+	if fromTask == (len(args) > 0) {
+		return errors.New("give either a FILE (or - for stdin), or --from-task")
+	}
+	raw, err := readTaskWarrior(cmd, args, fromTask)
+	if err != nil {
+		return err
+	}
+
+	parsed, err := taskpoet.ParseTaskWarrior(bytes.NewReader(raw), taskpoet.ParseOptions{
+		SkipInvalid: mustGetCmd[bool](cmd, "skip-invalid"),
+	})
+	if err != nil {
+		return err
+	}
+
+	rep, err := mustPoet().Store.ImportTasks(parsed.Tasks, taskpoet.ImportOptions{
+		Overwrite: mustGetCmd[bool](cmd, "overwrite"),
+		DryRun:    mustGetCmd[bool](cmd, "dry-run"),
+	})
+	if err != nil {
+		return err
+	}
+	printImportReport(rep, parsed)
+	return nil
 }
 
 func readTaskWarrior(cmd *cobra.Command, args []string, fromTask bool) ([]byte, error) {

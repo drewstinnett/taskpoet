@@ -18,7 +18,9 @@ Alternative to the awesome TaskWarrior app, with a few changes in mind:
 
 ```console
 # Coming from TaskWarrior? One command brings it all in
-$ taskpoet import taskwarrior --from-task
+$ taskpoet import --from-task
+# ...or, if all you have is an export (task export > tw.json)
+$ taskpoet import tw.json
 
 $ taskpoet add --project home --priority H --due friday Plant the tomatoes
 $ taskpoet add --recur weekly --due monday Water the plants

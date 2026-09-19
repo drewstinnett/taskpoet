@@ -3,6 +3,7 @@ package taskpoet
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/stretchr/testify/require"
 )
@@ -366,6 +368,7 @@ echo '[]'
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "status:completed")
 	require.Contains(t, err.Error(), "Something is badly wrong")
+	require.NotContains(t, err.Error(), "()")
 }
 
 func TestRunTaskWarriorExportWithoutWaitingStatus(t *testing.T) {
@@ -414,4 +417,46 @@ exit 9
 func TestRunTaskWarriorExportMissingBinary(t *testing.T) {
 	_, err := RunTaskWarriorExport(context.Background(), filepath.Join(t.TempDir(), "no-such-task"))
 	require.Error(t, err)
+	// Someone without Taskwarrior is pointed at the file route
+	require.Contains(t, err.Error(), "can't find Taskwarrior")
+	require.Contains(t, err.Error(), "taskpoet import tw.json")
+}
+
+func TestParseEncodings(t *testing.T) {
+	// The emoji is outside the basic plane, so UTF-16 needs a surrogate pair
+	const export = `[{"description":"Party 🎉 in Café – 日本語","status":"pending","uuid":"u1","entry":"20240101T000000Z"}]`
+	const want = "Party 🎉 in Café – 日本語"
+
+	utf16Bytes := func(order binary.AppendByteOrder, bom bool) []byte {
+		var b []byte
+		if bom {
+			b = order.AppendUint16(b, 0xFEFF)
+		}
+		for _, u := range utf16.Encode([]rune(export)) {
+			b = order.AppendUint16(b, u)
+		}
+		return b
+	}
+
+	tests := map[string][]byte{
+		"plain utf-8":        []byte(export),
+		"utf-8 with bom":     append([]byte{0xEF, 0xBB, 0xBF}, export...),
+		"utf-16le with bom":  utf16Bytes(binary.LittleEndian, true),
+		"utf-16be with bom":  utf16Bytes(binary.BigEndian, true),
+		"utf-16le, no bom":   utf16Bytes(binary.LittleEndian, false),
+		"utf-16be, no bom":   utf16Bytes(binary.BigEndian, false),
+		"leading whitespace": []byte("\n\n  " + export),
+	}
+	for name, in := range tests {
+		t.Run(name, func(t *testing.T) {
+			res, err := ParseTaskWarrior(bytes.NewReader(in), ParseOptions{})
+			require.NoError(t, err)
+			require.Len(t, res.Tasks, 1)
+			require.Equal(t, want, res.Tasks[0].Description)
+		})
+	}
+
+	// Still an error, and still a readable one, when it isn't JSON at all
+	_, err := ParseTaskWarrior(strings.NewReader("Project 'x' is not a thing"), ParseOptions{})
+	require.ErrorContains(t, err, "reading Taskwarrior export")
 }

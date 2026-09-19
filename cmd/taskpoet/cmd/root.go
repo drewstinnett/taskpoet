@@ -53,7 +53,9 @@ Effort/Impact Assessment, based on Limoncelli concept
 
 Coming from TaskWarrior? Bring everything with you:
 
-$ taskpoet import taskwarrior --from-task`,
+$ taskpoet import --from-task
+
+or, if you have an export file: taskpoet import tw.json`,
 		Version: version,
 		// Execute prints errors itself, and a not-found isn't a usage problem
 		SilenceUsage:  true,

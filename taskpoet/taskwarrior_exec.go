@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"strings"
 )
@@ -58,10 +59,23 @@ func RunTaskWarriorExport(ctx context.Context, bin string) ([]byte, error) {
 				// Taskwarrior exits 1 when nothing matches
 				continue
 			}
-			return nil, fmt.Errorf("running '%v %v export': %w (%v)", bin, filter, err, strings.TrimSpace(stderr.String()))
+			return nil, exportError(bin, filter, err, stderr.String())
 		}
 		out.Write(b)
 		out.WriteByte('\n')
 	}
 	return out.Bytes(), nil
+}
+
+// exportError explains a failed 'task export'. When there is no Taskwarrior to
+// run, it points at importing an export file instead.
+func exportError(bin, filter string, err error, stderr string) error {
+	// Not on the PATH, or an explicit path that isn't there
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("can't find Taskwarrior (%q). Install it, point --task-bin at it, or import an export made elsewhere with 'task export > tw.json' using 'taskpoet import tw.json'", bin)
+	}
+	if msg := strings.TrimSpace(stderr); msg != "" {
+		return fmt.Errorf("running '%v %v export': %w (%v)", bin, filter, err, msg)
+	}
+	return fmt.Errorf("running '%v %v export': %w", bin, filter, err)
 }

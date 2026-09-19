@@ -1,4 +1,5 @@
 ---
+version: 2
 before:
   hooks:
     - go mod tidy
@@ -27,7 +28,7 @@ builds:
         goarch: '386'
     binary: 'taskpoet'
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: 'taskpoet-{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     files:
       - completions/*
@@ -35,9 +36,27 @@ checksum:
   name_template: 'taskpoet-{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 snapshot:
-  name_template: "{{ .Tag }}-snapshot"
+  version_template: "{{ .Tag }}-snapshot"
+# Release notes come from the conventional commits since the last release. What
+# isn't listed here (docs, tests, ci, chore and so on) is left out.
 changelog:
-  skip: true
+  sort: asc
+  groups:
+    - title: Breaking changes
+      regexp: '^.*?[[:word:]]+(\([[:word:]/.-]+\))?!:.+$'
+      order: 0
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]/.-]+\))?:.+$'
+      order: 1
+    - title: Fixes
+      regexp: '^.*?(fix|perf)(\([[:word:]/.-]+\))?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^(docs|test|ci|chore|style|build)(\([[:word:]/.-]+\))?:'
+      - '^Merge '
 
 brews:
   - name: 'taskpoet'

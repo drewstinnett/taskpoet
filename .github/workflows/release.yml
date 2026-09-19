@@ -1,0 +1,81 @@
+---
+# Every push to main is looked at. If it has a feat, a fix, a perf or a breaking
+# change since the last release, the next version is worked out from them (see
+# scripts/conventional-commits.sh), tagged, and built and published by
+# goreleaser. If not (docs, chore, ci and so on), nothing happens.
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  # For a release that failed half way: run it again on main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One at a time, and never cancel a release that is under way. A newer push
+# waits, and then sees everything since the last tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TZ: "America/New_York"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # All of it, and the tags: the version comes from the history
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+      - name: Work out the version
+        id: version
+        run: |
+          version=$(./scripts/conventional-commits.sh next)
+          tagged=false
+          if [ -z "$version" ]; then
+            # Nothing new, but a tag on this very commit with no release for it
+            # is an earlier run that died after tagging: finish that one
+            tag=$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | head -n1)
+            if [ -n "$tag" ] && ! gh release view "$tag" >/dev/null 2>&1; then
+              version=$tag
+              tagged=true
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tagged=$tagged" >> "$GITHUB_OUTPUT"
+          if [ -n "$version" ]; then
+            echo "::notice::Releasing $version"
+          else
+            echo "::notice::No release: no feat, fix, perf or breaking change since the last tag"
+          fi
+      - name: Tests
+        if: steps.version.outputs.version != ''
+        run: go test ./...
+      - name: Tag
+        if: steps.version.outputs.version != '' && steps.version.outputs.tagged != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "$VERSION"
+      - name: Run GoReleaser
+        if: steps.version.outputs.version != ''
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

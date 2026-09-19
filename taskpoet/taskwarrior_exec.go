@@ -34,7 +34,8 @@ func RunTaskWarriorExport(ctx context.Context, bin string) ([]byte, error) {
 	var out bytes.Buffer
 	for _, f := range taskWarriorExportFilters {
 		filter := f.filter
-		cmd := exec.CommandContext(ctx, bin,
+		// The binary is whatever the user pointed --task-bin at, on purpose
+		cmd := exec.CommandContext(ctx, bin, //nolint:gosec
 			"rc.json.array=on",
 			"rc.verbose=nothing",
 			"rc.confirmation=off",

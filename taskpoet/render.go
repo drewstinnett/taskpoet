@@ -26,7 +26,10 @@ type TableOpts struct {
 	SortBy       any
 }
 
-const descriptionColumnName = "Description"
+const (
+	descriptionColumnName = "Description"
+	dueColumnName         = "Due"
+)
 
 var columnMap = map[string]func(Task) string{
 	"ID":      func(t Task) string { return t.ShortID() },
@@ -40,7 +43,7 @@ var columnMap = map[string]func(Task) string{
 		}
 		return t.DescriptionDetails()
 	},
-	"Due": func(t Task) string {
+	dueColumnName: func(t Task) string {
 		if t.Due != nil {
 			return shortDuration(time.Since(*t.Due) * -1)
 		}
@@ -102,7 +105,7 @@ func (t taskTable) Generate() *table.Table {
 }
 
 var columnStyles = map[string]func(Tasks, int, lipgloss.Style, themes.Styling) lipgloss.Style{
-	"due": func(tasks Tasks, row int, rowStyle lipgloss.Style, t themes.Styling) lipgloss.Style {
+	fieldDue: func(tasks Tasks, row int, rowStyle lipgloss.Style, t themes.Styling) lipgloss.Style {
 		if tasks[row-1].Due != nil {
 			rdue := time.Since(*tasks[row-1].Due)
 			switch {
@@ -131,8 +134,8 @@ func (t taskTable) StyleFunc(row, col int) lipgloss.Style {
 	}
 
 	switch t.columns[col] {
-	case "Due":
-		return columnStyles["due"](t.tasks, row, rowStyle, t.styling)
+	case dueColumnName:
+		return columnStyles[fieldDue](t.tasks, row, rowStyle, t.styling)
 	default:
 		return rowStyle
 	}
@@ -150,6 +153,28 @@ func shortIDs(ids []string) string {
 	return strings.Join(out, ",")
 }
 
+// dateRows describes the dates a task has, skipping the ones it doesn't
+func dateRows(t Task) [][]string {
+	var rows [][]string
+	for _, d := range []struct {
+		name string
+		when *time.Time
+	}{
+		{dueColumnName, t.Due},
+		{"Scheduled", t.Scheduled},
+		{"Wait", t.Wait},
+		{"Until", t.Until},
+		{"Start", t.Start},
+		{"Reviewed", t.Reviewed},
+		{"End", t.End},
+	} {
+		if d.when != nil {
+			rows = append(rows, []string{d.name, descDate(*d.when)})
+		}
+	}
+	return rows
+}
+
 func descRows(t Task, blocks Tasks) [][]string {
 	rows := [][]string{
 		{"ID", fmt.Sprintf("%v (%v)", t.UUID, t.ShortID())},
@@ -163,22 +188,7 @@ func descRows(t Task, blocks Tasks) [][]string {
 		rows = append(rows, []string{"Priority", string(t.Priority)})
 	}
 	rows = append(rows, []string{"Entered", descDate(t.Entry)})
-	for _, d := range []struct {
-		name string
-		when *time.Time
-	}{
-		{"Due", t.Due},
-		{"Scheduled", t.Scheduled},
-		{"Wait", t.Wait},
-		{"Until", t.Until},
-		{"Start", t.Start},
-		{"Reviewed", t.Reviewed},
-		{"End", t.End},
-	} {
-		if d.when != nil {
-			rows = append(rows, []string{d.name, descDate(*d.when)})
-		}
-	}
+	rows = append(rows, dateRows(t)...)
 	if len(t.Tags) > 0 {
 		rows = append(rows, []string{"Tags", strings.Join(t.Tags, ",")})
 	}

@@ -128,6 +128,22 @@ type Task struct {
 	blocked  bool    // has an unfinished dependency
 }
 
+// Names of task fields that are used as keys in more than one place: the
+// Taskwarrior export, and the urgency weights.
+const (
+	fieldDescription = "description"
+	fieldPriority    = "priority"
+	fieldDue         = "due"
+	fieldEnd         = "end"
+	fieldEntry       = "entry"
+	fieldModified    = "modified"
+	fieldStart       = "start"
+	fieldWait        = "wait"
+	fieldUntil       = "until"
+	fieldScheduled   = "scheduled"
+	fieldReviewed    = "reviewed"
+)
+
 // shortIDLen is how many characters of the UUID we show. This is the same as
 // Taskwarrior, and is enough to stay unique in a large history.
 const shortIDLen = 8

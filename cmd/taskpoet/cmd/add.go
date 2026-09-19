@@ -24,24 +24,11 @@ func taskWithCmd(p *taskpoet.Poet, cmd *cobra.Command, args []string) (*taskpoet
 		taskpoet.WithPriority(priority),
 	}
 
-	cal := taskpoet.NewCalendar()
-	for _, d := range []struct {
-		flag string
-		opt  func(*time.Time) taskpoet.TaskOption
-	}{
-		{"due", taskpoet.WithDue},
-		{"wait", taskpoet.WithWait},
-		{"scheduled", taskpoet.WithScheduled},
-		{"until", taskpoet.WithUntil},
-	} {
-		if in := mustGetCmd[string](cmd, d.flag); in != "" {
-			when, err := cal.Date(in)
-			if err != nil {
-				return nil, fmt.Errorf("--%v: %w", d.flag, err)
-			}
-			opts = append(opts, d.opt(when))
-		}
+	dates, err := datesWithCmd(cmd)
+	if err != nil {
+		return nil, err
 	}
+	opts = append(opts, dates...)
 
 	if deps := mustGetCmd[[]string](cmd, "depends"); len(deps) > 0 {
 		ids := make([]string, len(deps))
@@ -74,6 +61,30 @@ func taskWithCmd(p *taskpoet.Poet, cmd *cobra.Command, args []string) (*taskpoet
 		task.RType = taskpoet.RTypeChained
 	}
 	return task, nil
+}
+
+// datesWithCmd reads the date flags of the add command
+func datesWithCmd(cmd *cobra.Command) ([]taskpoet.TaskOption, error) {
+	var opts []taskpoet.TaskOption
+	cal := taskpoet.NewCalendar()
+	for _, d := range []struct {
+		flag string
+		opt  func(*time.Time) taskpoet.TaskOption
+	}{
+		{"due", taskpoet.WithDue},
+		{"wait", taskpoet.WithWait},
+		{"scheduled", taskpoet.WithScheduled},
+		{"until", taskpoet.WithUntil},
+	} {
+		if in := mustGetCmd[string](cmd, d.flag); in != "" {
+			when, err := cal.Date(in)
+			if err != nil {
+				return nil, fmt.Errorf("--%v: %w", d.flag, err)
+			}
+			opts = append(opts, d.opt(when))
+		}
+	}
+	return opts, nil
 }
 
 // newAddCmd represents the add command

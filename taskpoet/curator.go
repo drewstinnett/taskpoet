@@ -37,7 +37,7 @@ var defaultWeightMap = weightMap{
 		}
 		return 0, 0, ""
 	},
-	"priority": func(t Task) (float64, int, string) {
+	fieldPriority: func(t Task) (float64, int, string) {
 		switch t.Priority {
 		case PriorityHigh:
 			return 3, 1, "H"
@@ -57,7 +57,7 @@ var defaultWeightMap = weightMap{
 		}
 		return 0, 0, ""
 	},
-	"due": func(t Task) (float64, int, string) {
+	fieldDue: func(t Task) (float64, int, string) {
 		if t.Due == nil {
 			return 0, 0, ""
 		}

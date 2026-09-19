@@ -37,62 +37,70 @@ func (s *Store) ImportTasks(ts Tasks, opts ImportOptions) (*ImportReport, error)
 		ByStatus: map[Status]int{},
 		DryRun:   opts.DryRun,
 	}
-
-	run := func(tx *bolt.Tx, write bool) error {
-		known := map[string]*Task{}
-		if err := s.bucket(tx, bucketTasks).ForEach(func(_, v []byte) error {
-			t, err := decodeTask(v)
-			if err != nil {
-				return err
-			}
-			known[t.UUID] = t
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		applied := make(Tasks, 0, len(ts))
-		for _, t := range ts {
-			rep.ByStatus[t.Status]++
-			if err := t.Validate(); err != nil {
-				return fmt.Errorf("task %v: %w", t.UUID, err)
-			}
-			old, exists := known[t.UUID]
-			switch {
-			case exists && !opts.Overwrite:
-				rep.Skipped++
-				continue
-			case exists:
-				rep.Overwritten++
-				// This isn't in Taskwarrior, so don't lose it
-				if t.EffortImpact == EffortImpactUnset {
-					t.EffortImpact = old.EffortImpact
-				}
-			default:
-				rep.Imported++
-			}
-			if write {
-				if err := s.putTask(tx, t); err != nil {
-					return fmt.Errorf("task %v: %w", t.UUID, err)
-				}
-			}
-			known[t.UUID] = t
-			applied = append(applied, t)
-		}
-		rep.Warnings = append(rep.Warnings, integrityWarnings(known, applied)...)
-		return nil
-	}
-
 	var err error
 	if opts.DryRun {
-		err = s.db.View(func(tx *bolt.Tx) error { return run(tx, false) })
+		err = s.db.View(func(tx *bolt.Tx) error { return s.importInto(tx, ts, opts, rep, false) })
 	} else {
-		err = s.db.Update(func(tx *bolt.Tx) error { return run(tx, true) })
+		err = s.db.Update(func(tx *bolt.Tx) error { return s.importInto(tx, ts, opts, rep, true) })
 	}
 	if err != nil {
 		return nil, err
 	}
 	return rep, nil
+}
+
+// knownTasks returns every stored task by UUID
+func (s *Store) knownTasks(tx *bolt.Tx) (map[string]*Task, error) {
+	known := map[string]*Task{}
+	err := s.bucket(tx, bucketTasks).ForEach(func(_, v []byte) error {
+		t, err := decodeTask(v)
+		if err != nil {
+			return err
+		}
+		known[t.UUID] = t
+		return nil
+	})
+	return known, err
+}
+
+// importInto does the work of an import inside a transaction, filling in the
+// report. Nothing is written unless write is true.
+func (s *Store) importInto(tx *bolt.Tx, ts Tasks, opts ImportOptions, rep *ImportReport, write bool) error {
+	known, err := s.knownTasks(tx)
+	if err != nil {
+		return err
+	}
+
+	applied := make(Tasks, 0, len(ts))
+	for _, t := range ts {
+		rep.ByStatus[t.Status]++
+		if err := t.Validate(); err != nil {
+			return fmt.Errorf("task %v: %w", t.UUID, err)
+		}
+		old, exists := known[t.UUID]
+		switch {
+		case exists && !opts.Overwrite:
+			rep.Skipped++
+			continue
+		case exists:
+			rep.Overwritten++
+			// This isn't in Taskwarrior, so don't lose it
+			if t.EffortImpact == EffortImpactUnset {
+				t.EffortImpact = old.EffortImpact
+			}
+		default:
+			rep.Imported++
+		}
+		if write {
+			if err := s.putTask(tx, t); err != nil {
+				return fmt.Errorf("task %v: %w", t.UUID, err)
+			}
+		}
+		known[t.UUID] = t
+		applied = append(applied, t)
+	}
+	rep.Warnings = append(rep.Warnings, integrityWarnings(known, applied)...)
+	return nil
 }
 
 const maxExamples = 5
@@ -112,8 +120,12 @@ func shortID(id string) string {
 // known, and reports references that don't hold up. None of these stop an
 // import, Taskwarrior itself allows them.
 func integrityWarnings(known map[string]*Task, applied Tasks) []string {
-	var warnings []string
+	return append(referenceWarnings(known, applied), cycleWarnings(known, applied)...)
+}
 
+// referenceWarnings reports dependencies and recurrence parents that point at
+// nothing, and recurring templates that can never spawn
+func referenceWarnings(known map[string]*Task, applied Tasks) []string {
 	var dangling, orphans, ruleless []string
 	for _, t := range applied {
 		for _, d := range t.Depends {
@@ -122,15 +134,15 @@ func integrityWarnings(known map[string]*Task, applied Tasks) []string {
 				break
 			}
 		}
-		if t.Parent != "" {
-			if _, ok := known[t.Parent]; !ok {
-				orphans = append(orphans, shortID(t.UUID))
-			}
+		if _, ok := known[t.Parent]; t.Parent != "" && !ok {
+			orphans = append(orphans, shortID(t.UUID))
 		}
 		if t.Status == StatusRecurring && t.Recur == "" {
 			ruleless = append(ruleless, shortID(t.UUID))
 		}
 	}
+
+	var warnings []string
 	if len(dangling) > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d tasks depend on tasks that are not in the database (kept as they are): %v", len(dangling), examples(dangling)))
 	}
@@ -140,8 +152,11 @@ func integrityWarnings(known map[string]*Task, applied Tasks) []string {
 	if len(ruleless) > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d recurring templates have no 'recur' rule and will never spawn anything: %v", len(ruleless), examples(ruleless)))
 	}
+	return warnings
+}
 
-	// Depth first walk to find dependency cycles
+// cycleWarnings reports dependency cycles reachable from the applied tasks
+func cycleWarnings(known map[string]*Task, applied Tasks) []string {
 	const (
 		unvisited = iota
 		visiting
@@ -149,6 +164,7 @@ func integrityWarnings(known map[string]*Task, applied Tasks) []string {
 	)
 	state := map[string]int{}
 	var cycles []string
+	// Depth first walk, a cycle is an edge back to a task still being visited
 	var visit func(id string, path []string)
 	visit = func(id string, path []string) {
 		state[id] = visiting
@@ -161,17 +177,7 @@ func integrityWarnings(known map[string]*Task, applied Tasks) []string {
 			case unvisited:
 				visit(d, path)
 			case visiting:
-				var loop []string
-				for i, p := range path {
-					if p == d {
-						for _, q := range path[i:] {
-							loop = append(loop, shortID(q))
-						}
-						break
-					}
-				}
-				loop = append(loop, shortID(d))
-				cycles = append(cycles, strings.Join(loop, " -> "))
+				cycles = append(cycles, describeCycle(path, d))
 			}
 		}
 		state[id] = done
@@ -181,8 +187,22 @@ func integrityWarnings(known map[string]*Task, applied Tasks) []string {
 			visit(t.UUID, nil)
 		}
 	}
-	if len(cycles) > 0 {
-		warnings = append(warnings, fmt.Sprintf("%d dependency cycles, none of these tasks can ever be unblocked: %v", len(cycles), examples(cycles)))
+	if len(cycles) == 0 {
+		return nil
 	}
-	return warnings
+	return []string{fmt.Sprintf("%d dependency cycles, none of these tasks can ever be unblocked: %v", len(cycles), examples(cycles))}
+}
+
+// describeCycle formats the part of path from 'from' onwards, closing the loop
+func describeCycle(path []string, from string) string {
+	var loop []string
+	for i, p := range path {
+		if p == from {
+			for _, q := range path[i:] {
+				loop = append(loop, shortID(q))
+			}
+			break
+		}
+	}
+	return strings.Join(append(loop, shortID(from)), " -> ")
 }

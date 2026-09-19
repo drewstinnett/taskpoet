@@ -278,7 +278,7 @@ func (s *Store) spawnTemplate(tx *bolt.Tx, tpl *Task, opts SpawnOptions, rep *Sp
 		if err := s.putTask(tx, inst); err != nil {
 			return nil, err
 		}
-		tpl.Mask = padMask(tpl.Mask, *inst.IMask, 'X')
+		tpl.Mask = padMask(tpl.Mask, *inst.IMask)
 		tpl.Mask = setMaskChar(tpl.Mask, *inst.IMask, '-')
 	}
 	tpl.Modified = opts.Now
@@ -343,9 +343,16 @@ func periodicNext(tpl *Task, rule Recurrence, insts Tasks, opts SpawnOptions) (i
 			maxHave = max(maxHave, *in.IMask)
 		}
 	}
-	origin := tpl.Due.In(opts.Location)
+	overdue, future := walkPeriods(tpl, rule, have, opts)
+	overdue, capped = catchUp(overdue, tpl, maxHave, opts)
+	return append(overdue, future...), capped
+}
 
-	var overdue, future []int
+// walkPeriods goes along the periods of a template from the start, and returns
+// the ones that are due already but have no instance, and the ones ahead that
+// need one to keep opts.Limit of them ready
+func walkPeriods(tpl *Task, rule Recurrence, have map[int]bool, opts SpawnOptions) (overdue, future []int) {
+	origin := tpl.Due.In(opts.Location)
 	futureHave := 0
 	for n := 0; n < maxPeriods; n++ {
 		due := rule.Add(origin, n)
@@ -367,22 +374,26 @@ func periodicNext(tpl *Task, rule Recurrence, insts Tasks, opts SpawnOptions) (i
 			future = append(future, n)
 		}
 	}
+	return overdue, future
+}
 
+// catchUp decides how many of the missed periods get an instance
+func catchUp(overdue []int, tpl *Task, maxHave int, opts SpawnOptions) (picked []int, capped bool) {
 	switch {
 	case opts.CatchUp == CatchUpAll:
 		if len(overdue) > maxCatchUp {
-			overdue, capped = overdue[:maxCatchUp], true
+			return overdue[:maxCatchUp], true
 		}
+		return overdue, false
 	case tpl.Until != nil && tpl.Until.Before(opts.Now):
 		// The series is over. Don't dig up a period from long ago.
-		overdue = nil
+		return nil, false
 	case len(overdue) > 0 && overdue[len(overdue)-1] > maxHave:
-		overdue = overdue[len(overdue)-1:]
+		return overdue[len(overdue)-1:], false
 	default:
 		// Anything missed is older than what we already have
-		overdue = nil
+		return nil, false
 	}
-	return append(overdue, future...), capped
 }
 
 // newInstance makes the pending task for period n of a template
@@ -421,12 +432,12 @@ func newInstance(tpl *Task, n int, due, now time.Time) *Task {
 	return inst
 }
 
-// padMask grows a mask to hold index i, filling the new places with c. Periods
-// that were never spawned are filled with 'X', the same as if they were deleted.
-func padMask(mask string, i int, c byte) string {
+// padMask grows a mask to hold index i. Periods that were never spawned are
+// filled with 'X', the same as if they were deleted.
+func padMask(mask string, i int) string {
 	b := []byte(mask)
 	for len(b) < i {
-		b = append(b, c)
+		b = append(b, 'X')
 	}
 	return string(b)
 }

@@ -59,67 +59,84 @@ func ParseTaskWarrior(r io.Reader, opts ParseOptions) (*ParseResult, error) {
 	if opts.Now.IsZero() {
 		opts.Now = defaultNow()
 	}
-	c := &twConverter{now: opts.Now, counts: map[string]int{}}
-	res := &ParseResult{}
-	seen := map[string]bool{}
-	dupes := 0
-
-	handle := func(idx int, raw json.RawMessage) error {
-		t, err := c.convert(raw)
-		if err != nil {
-			err = fmt.Errorf("record %d: %w", idx, err)
-			if opts.SkipInvalid {
-				res.Skipped++
-				res.Warnings = append(res.Warnings, fmt.Sprintf("skipped invalid %v", err))
-				return nil
-			}
-			return err
-		}
-		if seen[t.UUID] {
-			dupes++
-			return nil
-		}
-		seen[t.UUID] = true
-		res.Tasks = append(res.Tasks, t)
-		return nil
+	p := &twParser{
+		opts: opts,
+		conv: &twConverter{now: opts.Now, counts: map[string]int{}},
+		res:  &ParseResult{},
+		seen: map[string]bool{},
 	}
 
 	dec := json.NewDecoder(r)
-	idx := 0
 	for dec.More() {
 		var top json.RawMessage
 		if err := dec.Decode(&top); err != nil {
 			return nil, fmt.Errorf("reading Taskwarrior export: %w", err)
 		}
-		switch first := firstByte(top); first {
-		case '[':
-			var items []json.RawMessage
-			if err := json.Unmarshal(top, &items); err != nil {
-				return nil, fmt.Errorf("reading Taskwarrior export: %w", err)
-			}
-			for _, item := range items {
-				idx++
-				if err := handle(idx, item); err != nil {
-					return nil, err
-				}
-			}
-		case '{':
-			idx++
-			if err := handle(idx, top); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, fmt.Errorf("reading Taskwarrior export: expected a JSON array or object, got %q", first)
+		if err := p.topLevel(top); err != nil {
+			return nil, err
 		}
 	}
-	if idx == 0 {
+	if p.idx == 0 {
 		return nil, errors.New("the Taskwarrior export is empty")
 	}
-	if dupes > 0 {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("%d records appeared more than once in the input, only the first of each was kept", dupes))
+	if p.dupes > 0 {
+		p.res.Warnings = append(p.res.Warnings, fmt.Sprintf("%d records appeared more than once in the input, only the first of each was kept", p.dupes))
 	}
-	res.Warnings = append(res.Warnings, c.warnings()...)
-	return res, nil
+	p.res.Warnings = append(p.res.Warnings, p.conv.warnings()...)
+	return p.res, nil
+}
+
+// twParser reads the records of an export one at a time
+type twParser struct {
+	opts  ParseOptions
+	conv  *twConverter
+	res   *ParseResult
+	seen  map[string]bool
+	dupes int
+	idx   int // how many records were read, to point at the bad ones
+}
+
+// topLevel handles one top level JSON value, an array of records or a record
+func (p *twParser) topLevel(top json.RawMessage) error {
+	switch first := firstByte(top); first {
+	case '[':
+		var items []json.RawMessage
+		if err := json.Unmarshal(top, &items); err != nil {
+			return fmt.Errorf("reading Taskwarrior export: %w", err)
+		}
+		for _, item := range items {
+			if err := p.record(item); err != nil {
+				return err
+			}
+		}
+	case '{':
+		return p.record(top)
+	default:
+		return fmt.Errorf("reading Taskwarrior export: expected a JSON array or object, got %q", first)
+	}
+	return nil
+}
+
+// record converts one record and adds it to the result
+func (p *twParser) record(raw json.RawMessage) error {
+	p.idx++
+	t, err := p.conv.convert(raw)
+	if err != nil {
+		err = fmt.Errorf("record %d: %w", p.idx, err)
+		if p.opts.SkipInvalid {
+			p.res.Skipped++
+			p.res.Warnings = append(p.res.Warnings, fmt.Sprintf("skipped invalid %v", err))
+			return nil
+		}
+		return err
+	}
+	if p.seen[t.UUID] {
+		p.dupes++
+		return nil
+	}
+	p.seen[t.UUID] = true
+	p.res.Tasks = append(p.res.Tasks, t)
+	return nil
 }
 
 func firstByte(b []byte) byte {
@@ -249,11 +266,11 @@ func (c *twConverter) convert(raw json.RawMessage) (*Task, error) { //nolint:goc
 		case "uuid":
 			err = json.Unmarshal(v, &t.UUID)
 			t.UUID = strings.ToLower(strings.TrimSpace(t.UUID))
-		case "description":
+		case fieldDescription:
 			err = json.Unmarshal(v, &t.Description)
 		case "project":
 			err = json.Unmarshal(v, &t.Project)
-		case "priority":
+		case fieldPriority:
 			err = json.Unmarshal(v, &priority)
 		case "recur":
 			err = json.Unmarshal(v, &t.Recur)
@@ -310,29 +327,29 @@ func (c *twConverter) convert(raw json.RawMessage) (*Task, error) { //nolint:goc
 				}
 				t.Annotations = append(t.Annotations, Annotation{Entry: at, Description: a.Description})
 			}
-		case "entry", "modified", "start", "end", "due", "wait", "until", "scheduled", "reviewed":
+		case fieldEntry, fieldModified, fieldStart, fieldEnd, fieldDue, fieldWait, fieldUntil, fieldScheduled, fieldReviewed:
 			var at time.Time
 			if at, err = decodeTWTime(v); err != nil {
 				break
 			}
 			switch k {
-			case "entry":
+			case fieldEntry:
 				t.Entry, hasEntry = at, true
-			case "modified":
+			case fieldModified:
 				modified = &at
-			case "start":
+			case fieldStart:
 				t.Start = &at
-			case "end":
+			case fieldEnd:
 				t.End = &at
-			case "due":
+			case fieldDue:
 				t.Due = &at
-			case "wait":
+			case fieldWait:
 				t.Wait = &at
-			case "until":
+			case fieldUntil:
 				t.Until = &at
-			case "scheduled":
+			case fieldScheduled:
 				t.Scheduled = &at
-			case "reviewed":
+			case fieldReviewed:
 				t.Reviewed = &at
 			}
 		case "effort_impact":
@@ -398,7 +415,7 @@ func (c *twConverter) convert(raw json.RawMessage) (*Task, error) { //nolint:goc
 		if t.UDA == nil {
 			t.UDA = map[string]any{}
 		}
-		t.UDA["priority"] = priority
+		t.UDA[fieldPriority] = priority
 	}
 
 	if uniq := filterUniqueStrings(t.Depends); len(uniq) != len(t.Depends) {
@@ -426,27 +443,27 @@ func decodeTWTime(v json.RawMessage) (time.Time, error) {
 // TaskWarriorRecord returns the task as the object 'task export' would print
 func (t Task) TaskWarriorRecord() map[string]any {
 	rec := map[string]any{
-		"uuid":        t.UUID,
-		"status":      string(t.Status),
-		"description": t.Description,
-		"entry":       formatTWTime(t.Entry),
-		"modified":    formatTWTime(t.Modified),
+		"uuid":           t.UUID,
+		"status":         string(t.Status),
+		fieldDescription: t.Description,
+		fieldEntry:       formatTWTime(t.Entry),
+		fieldModified:    formatTWTime(t.Modified),
 	}
 	for k, v := range map[string]string{
-		"project":  t.Project,
-		"priority": string(t.Priority),
-		"recur":    t.Recur,
-		"rtype":    t.RType,
-		"mask":     t.Mask,
-		"parent":   t.Parent,
+		"project":     t.Project,
+		fieldPriority: string(t.Priority),
+		"recur":       t.Recur,
+		"rtype":       t.RType,
+		"mask":        t.Mask,
+		"parent":      t.Parent,
 	} {
 		if v != "" {
 			rec[k] = v
 		}
 	}
 	for k, v := range map[string]*time.Time{
-		"start": t.Start, "end": t.End, "due": t.Due, "wait": t.Wait,
-		"until": t.Until, "scheduled": t.Scheduled, "reviewed": t.Reviewed,
+		fieldStart: t.Start, fieldEnd: t.End, fieldDue: t.Due, fieldWait: t.Wait,
+		fieldUntil: t.Until, fieldScheduled: t.Scheduled, fieldReviewed: t.Reviewed,
 	} {
 		if v != nil {
 			rec[k] = formatTWTime(*v)
@@ -467,7 +484,7 @@ func (t Task) TaskWarriorRecord() map[string]any {
 	if len(t.Annotations) > 0 {
 		as := make([]map[string]string, len(t.Annotations))
 		for i, a := range t.Annotations {
-			as[i] = map[string]string{"entry": formatTWTime(a.Entry), "description": a.Description}
+			as[i] = map[string]string{fieldEntry: formatTWTime(a.Entry), "description": a.Description}
 		}
 		rec["annotations"] = as
 	}

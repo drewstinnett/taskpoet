@@ -22,44 +22,38 @@ func newFakeitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := mustPoet()
 			log.Info("Generating TODO tasks")
-			for i := 0; i < 100; i++ {
-				desc, err := faker.GetLorem().Sentence(reflect.Value{})
-				if err != nil {
-					return err
-				}
-				t, err := taskpoet.NewTask(desc.(string),
-					taskpoet.WithDue(randomDueDate()),
-					taskpoet.WithEntry(randomPastDate()),
-				)
-				if err != nil {
-					return err
-				}
-				if err := p.Store.Add(t); err != nil {
-					return err
-				}
+			if err := addFakeTasks(p, 100, false); err != nil {
+				return err
 			}
-
 			log.Info("Generating completed tasks")
-			for i := 0; i < 100; i++ {
-				desc, err := faker.GetLorem().Sentence(reflect.Value{})
-				if err != nil {
-					return err
-				}
-				t, err := taskpoet.NewTask(desc.(string),
-					taskpoet.WithEntry(randomPastDate()),
-					taskpoet.WithCompleted(randomPastDate()),
-				)
-				if err != nil {
-					return err
-				}
-				if err := p.Store.Add(t); err != nil {
-					return err
-				}
-			}
-			return nil
+			return addFakeTasks(p, 100, true)
 		},
 	}
 	return cmd
+}
+
+// addFakeTasks adds n made up tasks, either pending or already completed
+func addFakeTasks(p *taskpoet.Poet, n int, completed bool) error {
+	for i := 0; i < n; i++ {
+		desc, err := faker.GetLorem().Sentence(reflect.Value{})
+		if err != nil {
+			return err
+		}
+		opts := []taskpoet.TaskOption{taskpoet.WithEntry(randomPastDate())}
+		if completed {
+			opts = append(opts, taskpoet.WithCompleted(randomPastDate()))
+		} else {
+			opts = append(opts, taskpoet.WithDue(randomDueDate()))
+		}
+		t, err := taskpoet.NewTask(desc.(string), opts...)
+		if err != nil {
+			return err
+		}
+		if err := p.Store.Add(t); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func randomDueDate() *time.Time {

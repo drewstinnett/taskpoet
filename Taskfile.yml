@@ -8,9 +8,14 @@ tasks:
   doc:
     cmds:
       - gomarkdoc $(go list ./... | grep -v example) > doc/README.md
-  deeplint:
+  lint:
     cmds:
-      - golangci-lint run --enable-all
+      - golangci-lint run
+  deeplint:
+    # Every linter there is, noisy on purpose. godot currently crashes
+    # golangci-lint on this repo, so it's left out.
+    cmds:
+      - golangci-lint run --default all --disable godot
   test:
     cmds:
       - go test ./...

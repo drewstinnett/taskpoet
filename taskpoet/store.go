@@ -122,47 +122,16 @@ func (s *Store) Path() string {
 
 func (s *Store) init() error {
 	return s.db.Update(func(tx *bolt.Tx) error {
-		// v0.x kept one top level bucket per namespace, named /<ns>/tasks
-		var legacy bool
-		if err := tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
-			if bytes.HasPrefix(name, []byte("/")) {
-				legacy = true
-			}
-			return nil
-		}); err != nil {
+		if err := refuseLegacy(tx); err != nil {
 			return err
 		}
-		if legacy {
-			return ErrLegacyDatabase
-		}
-
-		root := tx.Bucket(s.root)
-		if root == nil {
-			var err error
-			if root, err = tx.CreateBucket(s.root); err != nil {
-				return err
-			}
-			meta, err := root.CreateBucket(bucketMeta)
-			if err != nil {
-				return err
-			}
-			if err := meta.Put(keySchema, []byte(strconv.Itoa(schemaVersion))); err != nil {
-				return err
-			}
-		}
-
-		meta := root.Bucket(bucketMeta)
-		if meta == nil {
-			return fmt.Errorf("namespace %q has no metadata, the database looks corrupt", s.root)
-		}
-		v, err := strconv.Atoi(string(meta.Get(keySchema)))
+		root, err := s.ensureRoot(tx)
 		if err != nil {
-			return fmt.Errorf("unreadable schema version: %w", err)
+			return err
 		}
-		if v > schemaVersion {
-			return fmt.Errorf("%w (schema %d, this build understands %d)", ErrNewerSchema, v, schemaVersion)
+		if err := s.checkSchema(root); err != nil {
+			return err
 		}
-
 		for _, name := range [][]byte{bucketTasks, bucketIdxStatus, bucketIdxParent, bucketIdxBlocks} {
 			if _, err := root.CreateBucketIfNotExists(name); err != nil {
 				return err
@@ -170,6 +139,57 @@ func (s *Store) init() error {
 		}
 		return nil
 	})
+}
+
+// refuseLegacy stops us from touching a database written by v0.x, which kept
+// one top level bucket per namespace, named /<ns>/tasks
+func refuseLegacy(tx *bolt.Tx) error {
+	var legacy bool
+	if err := tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
+		if bytes.HasPrefix(name, []byte("/")) {
+			legacy = true
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if legacy {
+		return ErrLegacyDatabase
+	}
+	return nil
+}
+
+// ensureRoot returns the bucket for our namespace, creating it (with its
+// metadata) the first time
+func (s *Store) ensureRoot(tx *bolt.Tx) (*bolt.Bucket, error) {
+	if root := tx.Bucket(s.root); root != nil {
+		return root, nil
+	}
+	root, err := tx.CreateBucket(s.root)
+	if err != nil {
+		return nil, err
+	}
+	meta, err := root.CreateBucket(bucketMeta)
+	if err != nil {
+		return nil, err
+	}
+	return root, meta.Put(keySchema, []byte(strconv.Itoa(schemaVersion)))
+}
+
+// checkSchema makes sure this build understands the data in the namespace
+func (s *Store) checkSchema(root *bolt.Bucket) error {
+	meta := root.Bucket(bucketMeta)
+	if meta == nil {
+		return fmt.Errorf("namespace %q has no metadata, the database looks corrupt", s.root)
+	}
+	v, err := strconv.Atoi(string(meta.Get(keySchema)))
+	if err != nil {
+		return fmt.Errorf("unreadable schema version: %w", err)
+	}
+	if v > schemaVersion {
+		return fmt.Errorf("%w (schema %d, this build understands %d)", ErrNewerSchema, v, schemaVersion)
+	}
+	return nil
 }
 
 func (s *Store) bucket(tx *bolt.Tx, name []byte) *bolt.Bucket {

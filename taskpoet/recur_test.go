@@ -125,9 +125,9 @@ func TestParseCatchUp(t *testing.T) {
 }
 
 func TestPadMask(t *testing.T) {
-	require.Equal(t, "XX", padMask("", 2, 'X'))
-	require.Equal(t, "+-X", padMask("+-X", 1, 'X'))
-	require.Equal(t, "+XX", padMask("+", 3, 'X'))
+	require.Equal(t, "XX", padMask("", 2))
+	require.Equal(t, "+-X", padMask("+-X", 1))
+	require.Equal(t, "+XX", padMask("+", 3))
 }
 
 // weeklyTemplate is due on Monday 2024-03-04 at 9am, every week

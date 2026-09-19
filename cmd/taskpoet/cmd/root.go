@@ -58,8 +58,9 @@ $ taskpoet import --from-task
 or, if you have an export file: taskpoet import tw.json`,
 		Version: version,
 		// Execute prints errors itself, and a not-found isn't a usage problem
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		SilenceUsage:     true,
+		SilenceErrors:    true,
+		PersistentPreRun: startUpdateCheck,
 	}
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.taskpoet.yaml)")
 	cmd.PersistentFlags().StringVar(&dbPath, "db", "", "path to the database file (default is $XDG_DATA_HOME/taskpoet/taskpoet.db)")
@@ -79,6 +80,7 @@ or, if you have an export file: taskpoet import tw.json`,
 		newListCmd(),
 		newLogCmd(),
 		newRecurCmd(),
+		newUpdateCmd(),
 	)
 	return cmd
 }
@@ -102,6 +104,9 @@ func Execute() {
 	closePoet()
 	if err != nil {
 		fmt.Println(err)
+	}
+	announceUpdate()
+	if err != nil {
 		os.Exit(1)
 	}
 }
@@ -136,6 +141,7 @@ func initConfig() {
 		viper.SetConfigName(".taskpoet")
 	}
 
+	viper.SetDefault("update.check", true)
 	viper.SetDefault("recurrence.enabled", true)
 	viper.SetDefault("recurrence.limit", 1)
 	viper.SetDefault("recurrence.catchup", string(taskpoet.CatchUpLatest))

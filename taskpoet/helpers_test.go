@@ -3,7 +3,7 @@ package taskpoet_test
 import (
 	"testing"
 
-	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/drewstinnett/taskpoet/v2/taskpoet"
 	"github.com/stretchr/testify/require"
 )
 

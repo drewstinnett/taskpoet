@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd"
+	"github.com/drewstinnett/taskpoet/v2/cmd/taskpoet/cmd"
 )
 
 func main() {

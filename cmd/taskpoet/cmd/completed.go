@@ -2,45 +2,36 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
 
-	"github.com/drewstinnett/taskpoet/taskpoet"
+	"github.com/drewstinnett/taskpoet/v2/taskpoet"
 	"github.com/spf13/cobra"
 )
 
-// getPendingCmd represents the getPending command
+// newCompletedCmd lists what has been done
 func newCompletedCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "completed",
-		Short:             "Get Completed tasks",
-		Aliases:           []string{"c", "complete"},
+		Use:               "completed [FILTER]",
+		Short:             "List completed tasks",
+		Aliases:           []string{"history", "hist"},
 		ValidArgsFunction: noComplete,
-		Long: `Get Completed Tasks
-`,
-		Run: func(cmd *cobra.Command, args []string) {
-			// limit, err := cmd.PersistentFlags().GetInt("limit")
-			// checkErr(err)
-			// tableOpts := mustTableOptsWithCmd(cmd, args)
-			tableOpts := &taskpoet.TableOpts{
-				Prefix:  "/completed",
-				Columns: []string{"ID", "Description", "Completed", "Tags"},
-				SortBy:  taskpoet.ByCompleted{},
-				Filters: []taskpoet.Filter{
-					taskpoet.FilterRegex,
-					taskpoet.FilterHidden,
-				},
+		Long: `List completed tasks, most recent first.
+
+Any arguments are a case insensitive regex, matched against the description.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tableOpts, err := tableOptsWithCmd(cmd, args)
+			if err != nil {
+				return err
 			}
-			checkErr(applyCobra(cmd, args, tableOpts))
-			var results []*taskpoet.Task
+			tableOpts.Statuses = []taskpoet.Status{taskpoet.StatusCompleted}
+			tableOpts.Columns = []string{"ID", "Completed", "Project", "Description", "Tags"}
+			tableOpts.SortBy = taskpoet.ByCompleted{}
 
-			results, err := poetC.Task.List("/completed")
-			checkErr(err)
-			sort.Slice(results, func(i, j int) bool {
-				return results[i].Added.Before(results[j].Added)
-			})
-
-			table := poetC.TaskTable(*tableOpts)
+			table, err := mustPoet().TaskTable(*tableOpts)
+			if err != nil {
+				return err
+			}
 			fmt.Print(table)
+			return nil
 		},
 	}
 	bindTableOpts(cmd)

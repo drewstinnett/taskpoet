@@ -6,19 +6,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// describeCmd represents the describe command
+// newDescribeCmd shows the details of a task
 func newDescribeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "describe",
+		Use:               "describe TASK",
 		Short:             "Describe a task",
 		Long:              `Describe a task...showing details, all that cool stuff`,
 		Args:              cobra.ExactArgs(1),
-		Aliases:           []string{"desc", "d"},
-		ValidArgsFunction: completeActive,
-		Run: func(cmd *cobra.Command, args []string) {
-			task, err := poetC.Task.GetWithPartialID(args[0], "", "")
-			checkErr(err)
-			fmt.Print(poetC.DescribeTask(*task))
+		Aliases:           []string{"desc", "d", "info"},
+		ValidArgsFunction: completeAny,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := mustPoet()
+			task, err := p.Store.GetByPrefix(args[0])
+			if err != nil {
+				return err
+			}
+			out, err := p.DescribeTask(*task)
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+			return nil
 		},
 	}
 	return cmd

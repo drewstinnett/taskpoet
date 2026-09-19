@@ -1,0 +1,13 @@
+[
+{"id":1,"description":"Old waiting task","entry":"20200101T000000Z","modified":"20200102T000000Z","status":"waiting","uuid":"aaaaaaaa-0000-4000-8000-000000000001","wait":"20990101T000000Z","tags":"home,errand, urgent","depends":"aaaaaaaa-0000-4000-8000-000000000002, aaaaaaaa-0000-4000-8000-000000000002"},
+{"id":2,"description":"Old style annotations","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-000000000002","annotation_1577923200":"first note","annotation_1577836800":"older note","project":null},
+{"description":"Has no entry but is modified","modified":"20210505T050505Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-000000000003"},
+{"description":"Custom priority values","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-000000000004","priority":"urgent"},
+{"description":"Old recurrence template","entry":"20200101T000000Z","status":"recurring","uuid":"aaaaaaaa-0000-4000-8000-000000000005","due":"20200110T000000Z","recur":"daily","mask":"++-"},
+{"description":"Old recurrence instance","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-000000000006","due":"20200112T000000Z","recur":"daily","parent":"aaaaaaaa-0000-4000-8000-000000000005","imask":"2"},
+{"description":"Mystery depends","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-000000000007","depends":["ffffffff-ffff-4fff-8fff-ffffffffffff"]},
+{"description":"Loop A","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-00000000000a","depends":["aaaaaaaa-0000-4000-8000-00000000000b"]},
+{"description":"Loop B","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-00000000000b","depends":["aaaaaaaa-0000-4000-8000-00000000000a"]},
+{"description":"Orphaned instance","entry":"20200101T000000Z","status":"pending","uuid":"aaaaaaaa-0000-4000-8000-00000000000c","parent":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","imask":0},
+{"description":"Recurring with no rule","entry":"20200101T000000Z","status":"recurring","uuid":"aaaaaaaa-0000-4000-8000-00000000000d","due":"20200110T000000Z"}
+]

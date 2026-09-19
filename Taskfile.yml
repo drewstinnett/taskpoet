@@ -13,11 +13,11 @@ tasks:
       - golangci-lint run --enable-all
   test:
     cmds:
-      - go test github.com/drewstinnett/taskpoet/taskpoet
+      - go test ./...
   cover:
     cmds:
       - go test -coverprofile=/tmp/gocover $(go list ./... | grep -v example) && go tool cover -html=/tmp/gocover
   install:
     cmds:
-      - go build -o /tmp/taskpoet ./cli/
+      - go build -o /tmp/taskpoet ./cmd/taskpoet
       - mv /tmp/taskpoet ~/bin/

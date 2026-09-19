@@ -2,101 +2,187 @@ package taskpoet
 
 import (
 	"fmt"
-	"os"
 	"strings"
-	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
-// TWTime is the format that TaskWarrior uses for timestamps
-type TWTime time.Time
-
-const twTimeLayout = "20060102T150405Z"
-
-var errExists = fmt.Errorf("task already exists")
-
-// UnmarshalJSON Parses the json string in the custom format
-func (t *TWTime) UnmarshalJSON(b []byte) (err error) {
-	s := strings.Trim(string(b), `"`)
-	nt, err := time.Parse(twTimeLayout, s)
-	*t = TWTime(nt)
-	return
+// ImportOptions controls what happens to tasks that are already stored
+type ImportOptions struct {
+	// Overwrite replaces tasks that already exist (matched by UUID) instead of
+	// leaving them alone
+	Overwrite bool
+	// DryRun works out the report without writing anything
+	DryRun bool
 }
 
-// MarshalJSON writes a quoted string in the custom format
-func (t TWTime) MarshalJSON() ([]byte, error) {
-	return []byte(t.String()), nil
+// ImportReport says what an import did, or would do for a dry run
+type ImportReport struct {
+	Read        int
+	Imported    int
+	Overwritten int
+	Skipped     int
+	// ByStatus counts the tasks that were read, by status
+	ByStatus map[Status]int
+	Warnings []string
+	DryRun   bool
 }
 
-// String returns the time in the custom format
-func (t *TWTime) String() string {
-	return time.Time(*t).String()
-}
+// ImportTasks stores a set of tasks in a single transaction: either all of
+// them are written, or none. It is safe to run again on the same input,
+// tasks are matched by UUID.
+func (s *Store) ImportTasks(ts Tasks, opts ImportOptions) (*ImportReport, error) {
+	rep := &ImportReport{
+		Read:     len(ts),
+		ByStatus: map[Status]int{},
+		DryRun:   opts.DryRun,
+	}
 
-// TaskWarriorTask is a task from TaskWarrior
-type TaskWarriorTask struct {
-	ID          int64          `json:"id,omitempty"`
-	Description string         `json:"description,omitempty"`
-	UUID        string         `json:"uuid,omitempty"`
-	Status      string         `json:"status,omitempty"`
-	Entry       *TWTime        `json:"entry,omitempty"`
-	Modified    *TWTime        `json:"modified,omitempty"`
-	Due         *TWTime        `json:"due,omitempty"`
-	Wait        *TWTime        `json:"wait,omitempty"`
-	End         *TWTime        `json:"end,omitempty"`
-	Reviewed    *TWTime        `json:"reviewed,omitempty"`
-	Until       *TWTime        `json:"until,omitempty"`
-	Mask        string         `json:"mask,omitempty"`
-	Urgency     float64        `json:"urgency,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
-	Annotations []TWAnnotation `json:"annotations,omitempty"`
-}
-
-// TWAnnotation is a TaskWarrior Annotation
-type TWAnnotation struct {
-	Entry       *TWTime `json:"entry,omitempty"`
-	Description string  `json:"description,omitempty"`
-}
-
-// TaskWarriorTasks is multiple TaskWarriorTasks items
-type TaskWarriorTasks []TaskWarriorTask
-
-// ImportTaskWarrior imports a set of TaskWarrior items and returns the number
-// it imported, and an optional error
-func (p *Poet) ImportTaskWarrior(ts TaskWarriorTasks, c chan ProgressStatus) (int, error) {
-	// total := len(ts)
-	var imported int
-	// Erase the defaults
-	p.Default = Task{}
-	total := len(ts)
-	for idx, twItem := range ts {
-		s := ProgressStatus{
-			Current: int64(idx),
-			Total:   int64(total),
-			Info:    fmt.Sprintf("Importing: %v", twItem.Description),
+	run := func(tx *bolt.Tx, write bool) error {
+		known := map[string]*Task{}
+		if err := s.bucket(tx, bucketTasks).ForEach(func(_, v []byte) error {
+			t, err := decodeTask(v)
+			if err != nil {
+				return err
+			}
+			known[t.UUID] = t
+			return nil
+		}); err != nil {
+			return err
 		}
-		if twItem.Mask != "" {
-			s.Warning = fmt.Sprintf("Skipping item with recursion mask since we know how to handle it yet: %v", twItem.Description)
-			pushStatus(c, s)
-			continue
-		}
-		t := MustNewTask(twItem.Description, WithTaskWarriorTask(twItem))
 
-		if !p.exists(t) {
-			fmt.Fprintf(os.Stderr, "DIIING: %+v\n", t)
-			if _, err := p.Task.Add(t); err != nil {
-				s.Warning = fmt.Sprintf("Error importing task: %v (%v)", twItem.Description, err.Error())
-			} else {
-				imported++
+		applied := make(Tasks, 0, len(ts))
+		for _, t := range ts {
+			rep.ByStatus[t.Status]++
+			if err := t.Validate(); err != nil {
+				return fmt.Errorf("task %v: %w", t.UUID, err)
+			}
+			old, exists := known[t.UUID]
+			switch {
+			case exists && !opts.Overwrite:
+				rep.Skipped++
+				continue
+			case exists:
+				rep.Overwritten++
+				// This isn't in Taskwarrior, so don't lose it
+				if t.EffortImpact == EffortImpactUnset {
+					t.EffortImpact = old.EffortImpact
+				}
+			default:
+				rep.Imported++
+			}
+			if write {
+				if err := s.putTask(tx, t); err != nil {
+					return fmt.Errorf("task %v: %w", t.UUID, err)
+				}
+			}
+			known[t.UUID] = t
+			applied = append(applied, t)
+		}
+		rep.Warnings = append(rep.Warnings, integrityWarnings(known, applied)...)
+		return nil
+	}
+
+	var err error
+	if opts.DryRun {
+		err = s.db.View(func(tx *bolt.Tx) error { return run(tx, false) })
+	} else {
+		err = s.db.Update(func(tx *bolt.Tx) error { return run(tx, true) })
+	}
+	if err != nil {
+		return nil, err
+	}
+	return rep, nil
+}
+
+const maxExamples = 5
+
+func examples(l []string) string {
+	if len(l) > maxExamples {
+		return strings.Join(l[:maxExamples], ", ") + fmt.Sprintf(", and %d more", len(l)-maxExamples)
+	}
+	return strings.Join(l, ", ")
+}
+
+func shortID(id string) string {
+	return id[0:min(len(id), shortIDLen)]
+}
+
+// integrityWarnings looks at the freshly applied tasks in the context of everything
+// known, and reports references that don't hold up. None of these stop an
+// import, Taskwarrior itself allows them.
+func integrityWarnings(known map[string]*Task, applied Tasks) []string {
+	var warnings []string
+
+	var dangling, orphans, ruleless []string
+	for _, t := range applied {
+		for _, d := range t.Depends {
+			if _, ok := known[d]; !ok {
+				dangling = append(dangling, fmt.Sprintf("%v -> %v", shortID(t.UUID), shortID(d)))
+				break
 			}
 		}
-
-		pushStatus(c, s)
+		if t.Parent != "" {
+			if _, ok := known[t.Parent]; !ok {
+				orphans = append(orphans, shortID(t.UUID))
+			}
+		}
+		if t.Status == StatusRecurring && t.Recur == "" {
+			ruleless = append(ruleless, shortID(t.UUID))
+		}
 	}
-	return imported, nil
-}
-
-func pushStatus(c chan ProgressStatus, s ProgressStatus) {
-	if c != nil {
-		c <- s
+	if len(dangling) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d tasks depend on tasks that are not in the database (kept as they are): %v", len(dangling), examples(dangling)))
 	}
+	if len(orphans) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d recurring instances point at a parent that is not in the database (kept as they are): %v", len(orphans), examples(orphans)))
+	}
+	if len(ruleless) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d recurring templates have no 'recur' rule and will never spawn anything: %v", len(ruleless), examples(ruleless)))
+	}
+
+	// Depth first walk to find dependency cycles
+	const (
+		unvisited = iota
+		visiting
+		done
+	)
+	state := map[string]int{}
+	var cycles []string
+	var visit func(id string, path []string)
+	visit = func(id string, path []string) {
+		state[id] = visiting
+		path = append(path, id)
+		for _, d := range known[id].Depends {
+			if _, ok := known[d]; !ok {
+				continue
+			}
+			switch state[d] {
+			case unvisited:
+				visit(d, path)
+			case visiting:
+				var loop []string
+				for i, p := range path {
+					if p == d {
+						for _, q := range path[i:] {
+							loop = append(loop, shortID(q))
+						}
+						break
+					}
+				}
+				loop = append(loop, shortID(d))
+				cycles = append(cycles, strings.Join(loop, " -> "))
+			}
+		}
+		state[id] = done
+	}
+	for _, t := range applied {
+		if state[t.UUID] == unvisited {
+			visit(t.UUID, nil)
+		}
+	}
+	if len(cycles) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d dependency cycles, none of these tasks can ever be unblocked: %v", len(cycles), examples(cycles)))
+	}
+	return warnings
 }

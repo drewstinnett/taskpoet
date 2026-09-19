@@ -25,11 +25,29 @@ var defaultWeightMap = weightMap{
 			return 0, 0, ""
 		}
 	},
-	"children": func(t Task) (float64, int, string) {
-		if len(t.Children) > 0 {
-			return 1, 1, "has children"
+	"blocking": func(t Task) (float64, int, string) {
+		if t.blocking > 0 {
+			return 1, 1, fmt.Sprintf("blocking %d tasks", t.blocking)
 		}
 		return 0, 0, ""
+	},
+	"blocked": func(t Task) (float64, int, string) {
+		if t.blocked {
+			return -3, 1, "waiting on another task"
+		}
+		return 0, 0, ""
+	},
+	"priority": func(t Task) (float64, int, string) {
+		switch t.Priority {
+		case PriorityHigh:
+			return 3, 1, "H"
+		case PriorityMedium:
+			return 2, 1, "M"
+		case PriorityLow:
+			return 1, 1, "L"
+		default:
+			return 0, 0, ""
+		}
 	},
 	"next": func(t Task) (float64, int, string) {
 		for _, tag := range t.Tags {
@@ -56,8 +74,8 @@ var defaultWeightMap = weightMap{
 		}
 	},
 	"age": func(t Task) (float64, int, string) {
-		// return float64(0.004), int(time.Since(t.Added).Hours() / 24), daysUnit
-		days := time.Since(t.Added).Hours() / 24
+		// return float64(0.004), int(time.Since(t.Entry).Hours() / 24), daysUnit
+		days := time.Since(t.Entry).Hours() / 24
 		if days < 1 {
 			return 0, 0, "super new"
 		}

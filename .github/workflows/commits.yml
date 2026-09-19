@@ -1,0 +1,35 @@
+---
+# Releases are cut from the commit messages, see release.yml, so they have to be
+# readable: <type>[(scope)][!]: <description>. See CONTRIBUTING.md.
+#
+# Both the title and the commits are checked because the merge button can use
+# either: a squash merge takes the PR title (for a PR of more than one commit),
+# a merge or rebase brings the commits themselves.
+name: Conventional Commits
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Self-test the checker
+        run: ./scripts/conventional-commits_test.sh
+      - name: PR title
+        env:
+          # Through the environment, never pasted into the script: it is text
+          # anyone can write
+          TITLE: ${{ github.event.pull_request.title }}
+        run: ./scripts/conventional-commits.sh check-title "$TITLE"
+      - name: Commits
+        env:
+          RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+        run: ./scripts/conventional-commits.sh check "$RANGE"

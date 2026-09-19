@@ -1,12 +1,10 @@
 ---
+# Tests, and a trial run of the release build so a broken .goreleaser.yaml shows
+# up on the pull request and not in the middle of a release. Releases themselves
+# are release.yml.
 name: goreleaser
 
 on:
-  push:
-    branches:
-      - 'main'
-    tags:
-      - 'v*'
   pull_request:
 
 jobs:
@@ -31,12 +29,8 @@ jobs:
           go mod tidy
           go test ./...
       -
-        name: Run GoReleaser
+        name: Trial release build
         uses: goreleaser/goreleaser-action@v5
-        if: success() && startsWith(github.ref, 'refs/tags/')
         with:
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          version: "~> v2"
+          args: release --snapshot --clean

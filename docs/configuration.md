@@ -13,12 +13,34 @@ recurrence:
   enabled: true
   limit: 1
   catchup: latest             # or all
+update:
+  check: true                 # look for new releases now and then, see below
 ```
 
 Every setting can also come from the environment, with a `TASKPOET_` prefix and
 underscores for the dots: `TASKPOET_DBPATH`, `TASKPOET_THEME`,
 `TASKPOET_DEFAULTS_DUE`, `TASKPOET_RECURRENCE_LIMIT`. Flags win over the
 environment, and the environment wins over the file.
+
+## Update checks
+
+Now and then taskpoet looks for a newer release, and says so after the command
+you ran, on stderr:
+
+```plain
+A new version of taskpoet is available: v2.1.0 (this is v2.0.0)
+Update it with: taskpoet update
+```
+
+It asks GitHub once every six hours at most, in the background, and holds up a
+command for a second at the very most while waiting for the answer. It says so
+once every six hours as well, not on every command. It is quiet when it isn't
+run from a terminal (scripts, cron, pipes), when `CI` is set, for shell
+completion, and for development builds. What it remembers is in
+`taskpoet/update-check.json` in your user cache directory, and can be deleted.
+
+To turn it off, set `update.check: false`, or `TASKPOET_UPDATE_CHECK=false`.
+`taskpoet update` still works when it is off.
 
 ## The database
 

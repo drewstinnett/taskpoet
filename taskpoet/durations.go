@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -114,25 +115,58 @@ func datePTR(t time.Time) *time.Time {
 	return &t
 }
 
-// Date returns a date in the future or past based on the given string. Can be a
-// Synonym or any valid go time.Duration string
-func (c Calendar) Date(s string) (*time.Time, error) {
-	syn, err := c.Synonym(s)
-	if err != nil {
-		// Is this a taskwarrior duration?
-		if twd, derr := parseDuration(s); derr == nil {
-			return datePTR(c.present.Add(*twd)), nil
-		}
-		// Is this a normal-ish duration?
+// absoluteLayouts are the exact dates and times Date understands. Dates and
+// times without a zone are in the calendar's own time zone.
+var absoluteLayouts = []struct {
+	layout string
+	utc    bool // the layout says Z, but Go only reads that as UTC when told to
+}{
+	{layout: "2006-1-2"},
+	{layout: "2006-1-2T15:04"},
+	{layout: "2006-1-2 15:04"},
+	{layout: "2006-1-2T15:04:05"},
+	{layout: "2006-1-2 15:04:05"},
+	{layout: time.RFC3339},
+	{layout: "20060102"},
+	{layout: twTimeLayout, utc: true}, // what Taskwarrior writes
+}
 
-		var pderr error
-		var d time.Duration
-		if d, pderr = time.ParseDuration(s); pderr == nil {
-			return datePTR(c.present.Add(d)), nil
+// parseAbsolute reads an exact date or time like 2024-05-01 or 2024-05-01 17:30
+func parseAbsolute(s string, loc *time.Location) (time.Time, bool) {
+	for _, l := range absoluteLayouts {
+		in := loc
+		if l.utc {
+			in = time.UTC
 		}
-		return nil, pderr
+		if t, err := time.ParseInLocation(l.layout, s, in); err == nil {
+			return t, true
+		}
 	}
-	return &syn, nil
+	return time.Time{}, false
+}
+
+// Date returns a date in the future or past based on the given string. Can be a
+// Synonym like 'friday', a duration like '2d' (or any valid go time.Duration
+// string) counted from now, or an exact date like '2024-05-01' or
+// '2024-05-01 17:30'.
+func (c Calendar) Date(s string) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if syn, err := c.Synonym(s); err == nil {
+		return &syn, nil
+	}
+	// These are strict, so they can't be mistaken for a duration
+	if t, ok := parseAbsolute(s, c.present.Location()); ok {
+		return &t, nil
+	}
+	// Is this a taskwarrior duration?
+	if twd, err := parseDuration(s); err == nil {
+		return datePTR(c.present.Add(*twd)), nil
+	}
+	// Is this a normal-ish duration?
+	if d, err := time.ParseDuration(s); err == nil {
+		return datePTR(c.present.Add(d)), nil
+	}
+	return nil, fmt.Errorf("cannot make a date out of %q: use a word like friday, a duration like 2d, or a date like 2024-05-01", s)
 }
 
 func (c Calendar) calcDay(twd time.Weekday) time.Time {

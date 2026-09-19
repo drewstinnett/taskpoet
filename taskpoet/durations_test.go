@@ -258,6 +258,50 @@ func TestCalendarDate(t *testing.T) {
 
 	got, err = c.Date("never-works")
 	require.Error(t, err)
-	require.EqualError(t, err, "time: invalid duration \"never-works\"")
+	require.ErrorContains(t, err, "cannot make a date out of \"never-works\"")
 	require.Nil(t, got)
+}
+
+func TestCalendarDateFormats(t *testing.T) {
+	loc := time.FixedZone("test", -5*60*60)
+	present := time.Date(2023, 10, 10, 8, 0, 0, 0, loc) // This is a Tuesday
+	cal := NewCalendar(WithPresent(&present))
+
+	tests := map[string]struct {
+		in     string
+		expect time.Time
+	}{
+		"synonym":            {"tomorrow", time.Date(2023, 10, 11, 0, 0, 0, 0, loc)},
+		"taskwarrior days":   {"2d", present.Add(48 * time.Hour)},
+		"taskwarrior weeks":  {"1w", present.Add(7 * 24 * time.Hour)},
+		"go duration":        {"1.5h", present.Add(90 * time.Minute)},
+		"surrounding space":  {"  2d ", present.Add(48 * time.Hour)},
+		"date":               {"2024-05-01", time.Date(2024, 5, 1, 0, 0, 0, 0, loc)},
+		"date and minutes":   {"2024-05-01 17:30", time.Date(2024, 5, 1, 17, 30, 0, 0, loc)},
+		"date T minutes":     {"2024-05-01T17:30", time.Date(2024, 5, 1, 17, 30, 0, 0, loc)},
+		"date and seconds":   {"2024-05-01 17:30:15", time.Date(2024, 5, 1, 17, 30, 15, 0, loc)},
+		"date T seconds":     {"2024-05-01T17:30:15", time.Date(2024, 5, 1, 17, 30, 15, 0, loc)},
+		"rfc3339 keeps zone": {"2024-05-01T17:30:00+02:00", time.Date(2024, 5, 1, 15, 30, 0, 0, time.UTC)},
+		"compact date":       {"20240501", time.Date(2024, 5, 1, 0, 0, 0, 0, loc)},
+		"taskwarrior is utc": {"20240501T173000Z", time.Date(2024, 5, 1, 17, 30, 0, 0, time.UTC)},
+		"leap day":           {"2024-02-29", time.Date(2024, 2, 29, 0, 0, 0, 0, loc)},
+		"end of year":        {"2023-12-31 23:59", time.Date(2023, 12, 31, 23, 59, 0, 0, loc)},
+		"a date in the past": {"2001-09-09", time.Date(2001, 9, 9, 0, 0, 0, 0, loc)},
+		"no leading zeros":   {"2024-1-5", time.Date(2024, 1, 5, 0, 0, 0, 0, loc)},
+	}
+	for desc, tt := range tests {
+		t.Run(desc, func(t *testing.T) {
+			got, err := cal.Date(tt.in)
+			require.NoError(t, err)
+			require.True(t, tt.expect.Equal(*got), "want %v, got %v", tt.expect, *got)
+		})
+	}
+
+	for _, bad := range []string{"", "nonsense", "2024-13-01", "2023-02-29", "2024-05-01 25:00", "05/01/2024"} {
+		t.Run("invalid "+bad, func(t *testing.T) {
+			_, err := cal.Date(bad)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "cannot make a date out of")
+		})
+	}
 }

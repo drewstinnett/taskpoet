@@ -145,10 +145,10 @@ func bindAdd(cmd *cobra.Command) *cobra.Command {
 	checkErr(cmd.RegisterFlagCompletionFunc("priority", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"H\tHigh", "M\tMedium", "L\tLow"}, cobra.ShellCompDirectiveNoFileComp
 	}))
-	cmd.Flags().StringP("due", "d", "", "How long before this is due?")
-	cmd.Flags().StringP("wait", "w", "", "Wait until given duration to actually show up as pending")
-	cmd.Flags().String("scheduled", "", "When you plan to start working on this")
-	cmd.Flags().String("until", "", "The task expires and is removed after this time")
+	cmd.Flags().StringP("due", "d", "", "When this is due: a word like friday, a duration like 2d, or a date like 2024-05-01 17:30")
+	cmd.Flags().StringP("wait", "w", "", "Hide this until then, same formats as --due")
+	cmd.Flags().String("scheduled", "", "When you plan to start working on this, same formats as --due")
+	cmd.Flags().String("until", "", "The task expires after this time, same formats as --due")
 	cmd.Flags().StringSliceP("tag", "t", []string{}, "Tags to include in this task")
 	cmd.Flags().String("recur", "", "Make this a recurring task, like daily, weekdays, weekly, monthly, 3d, 2w. Needs --due")
 	cmd.Flags().Bool("chained", false, "With --recur: the next one is due a period after you finish this one, not on a fixed schedule")

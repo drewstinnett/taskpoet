@@ -52,52 +52,33 @@ func TestNewCalendar(t *testing.T) {
 }
 
 func TestShortDurations(t *testing.T) {
-	require.Equal(t, "2h", shortDuration(2*time.Hour), "simple-positive")
-	require.Equal(t, "-2h", shortDuration(-2*time.Hour), "simple-negative")
+	const day = 24 * time.Hour
 	tests := map[string]struct {
 		given  time.Duration
 		expect string
 	}{
-		"a couple hours": {
-			given:  time.Hour * 2,
-			expect: "2h",
-		},
-		"a couple hours ago": {
-			given:  -time.Hour * 2,
-			expect: "-2h",
-		},
-		"a couple days": {
-			given:  time.Hour * 49,
-			expect: "2d",
-		},
-		"a couple days ago": {
-			given:  -time.Hour * 49,
-			expect: "-2d",
-		},
-		"a couple weeks": {
-			given:  time.Hour * 24 * 15,
-			expect: "2w",
-		},
-		"a couple weeks ago": {
-			given:  -time.Hour * 24 * 15,
-			expect: "-2w",
-		},
-		"a couple months": {
-			given:  time.Hour * 24 * 7 * 70,
-			expect: "2M",
-		},
-		"a couple months ago": {
-			given:  -time.Hour * 24 * 7 * 70,
-			expect: "-2M",
-		},
-		"a year": {
-			given:  time.Hour * 24 * 7 * 30 * 400,
-			expect: "1y",
-		},
-		"a year ago": {
-			given:  -time.Hour * 24 * 7 * 30 * 400,
-			expect: "-1y",
-		},
+		"nothing":               {0, "0h"},
+		"a couple hours":        {2 * time.Hour, "2h"},
+		"almost a day":          {23*time.Hour + 59*time.Minute, "23h"},
+		"a day":                 {day, "1d"},
+		"a couple days":         {49 * time.Hour, "2d"},
+		"almost a week":         {7*day - time.Minute, "6d"},
+		"a week":                {7 * day, "1w"},
+		"a couple weeks":        {15 * day, "2w"},
+		"almost a month":        {30*day - time.Minute, "4w"},
+		"a month":               {30 * day, "1M"},
+		"a couple months":       {70 * day, "2M"},
+		"almost a year":         {365*day - time.Minute, "12M"},
+		"a year":                {365 * day, "1y"},
+		"a year and change":     {400 * day, "1y"},
+		"an imported old task":  {991 * day, "2y"},
+		"a very old task":       {20 * 365 * day, "20y"},
+		"negative hours":        {-2 * time.Hour, "-2h"},
+		"negative days":         {-49 * time.Hour, "-2d"},
+		"negative weeks":        {-15 * day, "-2w"},
+		"negative months":       {-70 * day, "-2M"},
+		"negative years":        {-400 * day, "-1y"},
+		"negative just a month": {-30 * day, "-1M"},
 	}
 	for desc, tt := range tests {
 		require.Equal(t, tt.expect, shortDuration(tt.given), desc)
@@ -141,8 +122,10 @@ func TestCalendarMonth(t *testing.T) {
 }
 
 func TestCalendarWeekday(t *testing.T) {
-	present := time.Date(2023, 10, 10, 8, 0, 0, 42, time.Local) // This is a Tuesday
-	cal := NewCalendar(WithPresent(&present))
+	cal := NewCalendar(WithPresent(
+		ptr(time.Date(2023, 10, 10, 8, 0, 0, 42, time.Local)), // This is a Tuesday
+
+	))
 
 	tests := map[string]struct {
 		given    string
@@ -275,6 +258,52 @@ func TestCalendarDate(t *testing.T) {
 
 	got, err = c.Date("never-works")
 	require.Error(t, err)
-	require.EqualError(t, err, "time: invalid duration \"never-works\"")
+	require.ErrorContains(t, err, "cannot make a date out of \"never-works\"")
 	require.Nil(t, got)
+}
+
+func TestCalendarDateFormats(t *testing.T) {
+	loc := time.FixedZone("test", -5*60*60)
+	present := time.Date(2023, 10, 10, 8, 0, 0, 0, loc) // This is a Tuesday
+	cal := NewCalendar(WithPresent(&present))
+
+	tests := map[string]struct {
+		in     string
+		expect time.Time
+	}{
+		"synonym":              {"tomorrow", time.Date(2023, 10, 11, 0, 0, 0, 0, loc)},
+		"taskwarrior days":     {"2d", present.Add(48 * time.Hour)},
+		"taskwarrior weeks":    {"1w", present.Add(7 * 24 * time.Hour)},
+		"go duration":          {"1.5h", present.Add(90 * time.Minute)},
+		"go compound duration": {"1h30m", present.Add(90 * time.Minute)},
+		"surrounding space":    {"  2d ", present.Add(48 * time.Hour)},
+		"date":                 {"2024-05-01", time.Date(2024, 5, 1, 0, 0, 0, 0, loc)},
+		"date and minutes":     {"2024-05-01 17:30", time.Date(2024, 5, 1, 17, 30, 0, 0, loc)},
+		"date T minutes":       {"2024-05-01T17:30", time.Date(2024, 5, 1, 17, 30, 0, 0, loc)},
+		"date and seconds":     {"2024-05-01 17:30:15", time.Date(2024, 5, 1, 17, 30, 15, 0, loc)},
+		"date T seconds":       {"2024-05-01T17:30:15", time.Date(2024, 5, 1, 17, 30, 15, 0, loc)},
+		"rfc3339 keeps zone":   {"2024-05-01T17:30:00+02:00", time.Date(2024, 5, 1, 15, 30, 0, 0, time.UTC)},
+		"compact date":         {"20240501", time.Date(2024, 5, 1, 0, 0, 0, 0, loc)},
+		"taskwarrior is utc":   {"20240501T173000Z", time.Date(2024, 5, 1, 17, 30, 0, 0, time.UTC)},
+		"leap day":             {"2024-02-29", time.Date(2024, 2, 29, 0, 0, 0, 0, loc)},
+		"end of year":          {"2023-12-31 23:59", time.Date(2023, 12, 31, 23, 59, 0, 0, loc)},
+		"a date in the past":   {"2001-09-09", time.Date(2001, 9, 9, 0, 0, 0, 0, loc)},
+		"no leading zeros":     {"2024-1-5", time.Date(2024, 1, 5, 0, 0, 0, 0, loc)},
+	}
+	for desc, tt := range tests {
+		t.Run(desc, func(t *testing.T) {
+			got, err := cal.Date(tt.in)
+			require.NoError(t, err)
+			require.True(t, tt.expect.Equal(*got), "want %v, got %v", tt.expect, *got)
+		})
+	}
+
+	// These used to be read as their first word, e.g. "3 days ago" as 3 days ahead
+	for _, bad := range []string{"", "nonsense", "3 days ago", "2d ago", "2d 4h", "2024-13-01", "2023-02-29", "2024-05-01 25:00", "05/01/2024"} {
+		t.Run("invalid "+bad, func(t *testing.T) {
+			_, err := cal.Date(bad)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "cannot make a date out of")
+		})
+	}
 }

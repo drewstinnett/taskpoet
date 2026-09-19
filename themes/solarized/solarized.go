@@ -5,7 +5,7 @@ package solarized
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/drewstinnett/taskpoet/themes"
+	"github.com/drewstinnett/taskpoet/v2/themes"
 )
 
 // Colors is the thing that holds all the styles

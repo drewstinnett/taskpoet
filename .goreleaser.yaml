@@ -10,9 +10,9 @@ builds:
     mod_timestamp: '{{ .CommitTimestamp }}'
     ldflags:
       - '-s -w'
-      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.date={{ .CommitTimestamp }}
-      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.version={{ .Tag }}
-      - -X github.com/drewstinnett/taskpoet/cmd/taskpoet/cmd.commit={{ .ShortCommit }}
+      - -X github.com/drewstinnett/taskpoet/v2/cmd/taskpoet/cmd.date={{ .CommitTimestamp }}
+      - -X github.com/drewstinnett/taskpoet/v2/cmd/taskpoet/cmd.version={{ .Tag }}
+      - -X github.com/drewstinnett/taskpoet/v2/cmd/taskpoet/cmd.commit={{ .ShortCommit }}
     flags:
       - -trimpath
     goos:

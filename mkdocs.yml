@@ -12,3 +12,11 @@ theme:
     - content.code.select
     - content.code.copy
     - content.tabs.link
+nav:
+  - Overview: index.md
+  - Install: install.md
+  - Coming from TaskWarrior: taskwarrior.md
+  - Recurring tasks: recurring.md
+  - Configuration: configuration.md
+  - Themes: themes.md
+  - Upgrading from v0.x: upgrading.md

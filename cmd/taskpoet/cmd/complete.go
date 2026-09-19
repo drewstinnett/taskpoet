@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"github.com/charmbracelet/log"
+	"github.com/drewstinnett/taskpoet/v2/taskpoet"
 
 	"github.com/spf13/cobra"
 )
 
-// completeCmd represents the complete command
+// newCompleteCmd marks a task as done
 func newCompleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "done TASK",
@@ -14,14 +15,19 @@ func newCompleteCmd() *cobra.Command {
 		Long:    `Mark a task as done`,
 		Aliases: []string{"c", "complete", "finish"},
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			task, err := poetC.Task.GetWithPartialID(args[0], "", "/active")
-			checkErr(err)
-			checkErr(poetC.Task.Complete(task))
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := mustPoet()
+			task, err := p.Store.GetByPrefix(args[0], taskpoet.StatusPending)
+			if err != nil {
+				return err
+			}
+			if _, err := p.Store.Complete(task.UUID); err != nil {
+				return err
+			}
 			log.Info("Completed task, nice work!", "task", task.Description, "id", task.ShortID())
+			return nil
 		},
 		ValidArgsFunction: completeActive,
 	}
-	cmd.PersistentFlags().IntP("limit", "l", 100, "Limit to N results")
 	return cmd
 }

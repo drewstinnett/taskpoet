@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,9 +16,10 @@ func parseDuration(s string) (*time.Duration, error) {
 	if s == "" {
 		return nil, errors.New("duration must not be an empty string")
 	}
-	r := regexp.MustCompile(`(?P<ordinal>\d+)?\s?(?P<unit>\w+)`)
-	matches := r.FindStringSubmatch(s)
-	// fmt.Fprintf(os.Stderr, "MATCHES: %+v\n", matches)
+	matches := twDurationRe.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid duration %q", s)
+	}
 	ordinal := 1
 	if matches[1] != "" {
 		var err error
@@ -25,38 +27,42 @@ func parseDuration(s string) (*time.Duration, error) {
 			return nil, err
 		}
 	}
-	unit := matches[2]
+	unit, ok := twDurationUnit(matches[2])
+	if !ok {
+		return nil, fmt.Errorf("invalid unit: %v", matches[2])
+	}
+	d := time.Duration(ordinal) * unit
+	return &d, nil
+}
+
+// twDurationRe is a whole duration: an optional count, then a unit. It must
+// match the whole string, or '3 days ago' would be read as 3 days.
+var twDurationRe = regexp.MustCompile(`^\s*(?P<ordinal>\d+)?\s?(?P<unit>\w+)\s*$`)
+
+// twDurationUnit is how long one of a unit is
+func twDurationUnit(unit string) (time.Duration, bool) {
+	const day = 24 * time.Hour
 	switch unit {
 	case "seconds", "second", "secs", "sec", "s":
-		d := time.Duration(ordinal) * time.Second
-		return &d, nil
+		return time.Second, true
 	case "minutes", "minute", "mins", "min":
-		d := time.Duration(ordinal) * time.Minute
-		return &d, nil
+		return time.Minute, true
 	case "hours", "hour", "hrs", "hr", "h":
-		d := time.Duration(ordinal) * time.Hour
-		return &d, nil
+		return time.Hour, true
 	case daysUnit, "day", "d", "daily":
-		d := time.Duration(ordinal) * (24 * time.Hour)
-		return &d, nil
+		return day, true
 	case "weeks", "week", "wks", "wk", "w":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 7)
-		return &d, nil
+		return 7 * day, true
 	case "monthly", "months", "month", "mnths", "mths", "mth", "mo", "m":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 30)
-		return &d, nil
+		return 30 * day, true
 	case "quarterly", "quarters", "quarter", "qrtrs", "qrtr", "qtr", "q":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 91)
-		return &d, nil
+		return 91 * day, true
 	case "semiannual":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 180)
-		return &d, nil
+		return 180 * day, true
 	case "yearly", "years", "year", "yrs", "yr", "y":
-		d := time.Duration(ordinal) * (time.Hour * 8760)
-		return &d, nil
-	default:
-		return nil, fmt.Errorf("invalid unit: %v", unit)
+		return 8760 * time.Hour, true
 	}
+	return 0, false
 }
 
 // Synonym is a shorthand expression for a specific datetime
@@ -67,32 +73,28 @@ type Calendar struct {
 	present time.Time
 }
 
-// ShortDuration returns as short of a duration as we feel comfortable doing.
-// Like...2h, 3y, 4w, etc
-// func (c Calendar) ShortDuration(d time.Duration) string {
+// shortDuration returns as short of a duration as we feel comfortable doing.
+// Like...2h, 3d, 4w, 5M, 6y. A week is 7 days, a month is 30 days and a year is
+// 365 days, and it always rounds down.
 func shortDuration(d time.Duration) string {
 	prefix := ""
 	if d < 0 {
 		d *= -1
 		prefix = "-"
 	}
+	const day = 24 * time.Hour
 	var dur string
 	switch {
-	// Hours
-	case d < 24*time.Hour:
+	case d < day:
 		dur = fmt.Sprintf("%vh", int(d.Hours()))
-	// Days
-	case d < 7*24*time.Hour:
-		dur = fmt.Sprintf("%vd", int(d.Hours())/24)
-	// Weeks
-	case d < 7*24*30*time.Hour:
-		dur = fmt.Sprintf("%vw", int(d.Hours())/7/24)
-	// Months
-	case d < 7*24*30*12*time.Hour:
-		dur = fmt.Sprintf("%vM", int(d.Hours())/30/7/28)
-	// Years
+	case d < 7*day:
+		dur = fmt.Sprintf("%vd", int(d/day))
+	case d < 30*day:
+		dur = fmt.Sprintf("%vw", int(d/(7*day)))
+	case d < 365*day:
+		dur = fmt.Sprintf("%vM", int(d/(30*day)))
 	default:
-		dur = fmt.Sprintf("%vy", int(d.Hours())/30/7/24/365)
+		dur = fmt.Sprintf("%vy", int(d/(365*day)))
 	}
 	return fmt.Sprintf("%v%v", prefix, dur)
 }
@@ -118,25 +120,58 @@ func datePTR(t time.Time) *time.Time {
 	return &t
 }
 
-// Date returns a date in the future or past based on the given string. Can be a
-// Synonym or any valid go time.Duration string
-func (c Calendar) Date(s string) (*time.Time, error) {
-	syn, err := c.Synonym(s)
-	if err != nil {
-		// Is this a taskwarrior duration?
-		if twd, derr := parseDuration(s); derr == nil {
-			return datePTR(c.present.Add(*twd)), nil
-		}
-		// Is this a normal-ish duration?
+// absoluteLayouts are the exact dates and times Date understands. Dates and
+// times without a zone are in the calendar's own time zone.
+var absoluteLayouts = []struct {
+	layout string
+	utc    bool // the layout says Z, but Go only reads that as UTC when told to
+}{
+	{layout: "2006-1-2"},
+	{layout: "2006-1-2T15:04"},
+	{layout: "2006-1-2 15:04"},
+	{layout: "2006-1-2T15:04:05"},
+	{layout: "2006-1-2 15:04:05"},
+	{layout: time.RFC3339},
+	{layout: "20060102"},
+	{layout: twTimeLayout, utc: true}, // what Taskwarrior writes
+}
 
-		var pderr error
-		var d time.Duration
-		if d, pderr = time.ParseDuration(s); pderr == nil {
-			return datePTR(c.present.Add(d)), nil
+// parseAbsolute reads an exact date or time like 2024-05-01 or 2024-05-01 17:30
+func parseAbsolute(s string, loc *time.Location) (time.Time, bool) {
+	for _, l := range absoluteLayouts {
+		in := loc
+		if l.utc {
+			in = time.UTC
 		}
-		return nil, pderr
+		if t, err := time.ParseInLocation(l.layout, s, in); err == nil {
+			return t, true
+		}
 	}
-	return &syn, nil
+	return time.Time{}, false
+}
+
+// Date returns a date in the future or past based on the given string. Can be a
+// Synonym like 'friday', a duration like '2d' (or any valid go time.Duration
+// string) counted from now, or an exact date like '2024-05-01' or
+// '2024-05-01 17:30'.
+func (c Calendar) Date(s string) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if syn, err := c.Synonym(s); err == nil {
+		return &syn, nil
+	}
+	// These are strict, so they can't be mistaken for a duration
+	if t, ok := parseAbsolute(s, c.present.Location()); ok {
+		return &t, nil
+	}
+	// Is this a taskwarrior duration?
+	if twd, err := parseDuration(s); err == nil {
+		return datePTR(c.present.Add(*twd)), nil
+	}
+	// Is this a normal-ish duration?
+	if d, err := time.ParseDuration(s); err == nil {
+		return datePTR(c.present.Add(d)), nil
+	}
+	return nil, fmt.Errorf("cannot make a date out of %q: use a word like friday, a duration like 2d, or a date like 2024-05-01", s)
 }
 
 func (c Calendar) calcDay(twd time.Weekday) time.Time {

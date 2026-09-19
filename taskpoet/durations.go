@@ -16,9 +16,10 @@ func parseDuration(s string) (*time.Duration, error) {
 	if s == "" {
 		return nil, errors.New("duration must not be an empty string")
 	}
-	r := regexp.MustCompile(`(?P<ordinal>\d+)?\s?(?P<unit>\w+)`)
-	matches := r.FindStringSubmatch(s)
-	// fmt.Fprintf(os.Stderr, "MATCHES: %+v\n", matches)
+	matches := twDurationRe.FindStringSubmatch(s)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid duration %q", s)
+	}
 	ordinal := 1
 	if matches[1] != "" {
 		var err error
@@ -26,38 +27,42 @@ func parseDuration(s string) (*time.Duration, error) {
 			return nil, err
 		}
 	}
-	unit := matches[2]
+	unit, ok := twDurationUnit(matches[2])
+	if !ok {
+		return nil, fmt.Errorf("invalid unit: %v", matches[2])
+	}
+	d := time.Duration(ordinal) * unit
+	return &d, nil
+}
+
+// twDurationRe is a whole duration: an optional count, then a unit. It must
+// match the whole string, or '3 days ago' would be read as 3 days.
+var twDurationRe = regexp.MustCompile(`^\s*(?P<ordinal>\d+)?\s?(?P<unit>\w+)\s*$`)
+
+// twDurationUnit is how long one of a unit is
+func twDurationUnit(unit string) (time.Duration, bool) {
+	const day = 24 * time.Hour
 	switch unit {
 	case "seconds", "second", "secs", "sec", "s":
-		d := time.Duration(ordinal) * time.Second
-		return &d, nil
+		return time.Second, true
 	case "minutes", "minute", "mins", "min":
-		d := time.Duration(ordinal) * time.Minute
-		return &d, nil
+		return time.Minute, true
 	case "hours", "hour", "hrs", "hr", "h":
-		d := time.Duration(ordinal) * time.Hour
-		return &d, nil
+		return time.Hour, true
 	case daysUnit, "day", "d", "daily":
-		d := time.Duration(ordinal) * (24 * time.Hour)
-		return &d, nil
+		return day, true
 	case "weeks", "week", "wks", "wk", "w":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 7)
-		return &d, nil
+		return 7 * day, true
 	case "monthly", "months", "month", "mnths", "mths", "mth", "mo", "m":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 30)
-		return &d, nil
+		return 30 * day, true
 	case "quarterly", "quarters", "quarter", "qrtrs", "qrtr", "qtr", "q":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 91)
-		return &d, nil
+		return 91 * day, true
 	case "semiannual":
-		d := time.Duration(ordinal) * ((24 * time.Hour) * 180)
-		return &d, nil
+		return 180 * day, true
 	case "yearly", "years", "year", "yrs", "yr", "y":
-		d := time.Duration(ordinal) * (time.Hour * 8760)
-		return &d, nil
-	default:
-		return nil, fmt.Errorf("invalid unit: %v", unit)
+		return 8760 * time.Hour, true
 	}
+	return 0, false
 }
 
 // Synonym is a shorthand expression for a specific datetime

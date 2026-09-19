@@ -67,32 +67,28 @@ type Calendar struct {
 	present time.Time
 }
 
-// ShortDuration returns as short of a duration as we feel comfortable doing.
-// Like...2h, 3y, 4w, etc
-// func (c Calendar) ShortDuration(d time.Duration) string {
+// shortDuration returns as short of a duration as we feel comfortable doing.
+// Like...2h, 3d, 4w, 5M, 6y. A week is 7 days, a month is 30 days and a year is
+// 365 days, and it always rounds down.
 func shortDuration(d time.Duration) string {
 	prefix := ""
 	if d < 0 {
 		d *= -1
 		prefix = "-"
 	}
+	const day = 24 * time.Hour
 	var dur string
 	switch {
-	// Hours
-	case d < 24*time.Hour:
+	case d < day:
 		dur = fmt.Sprintf("%vh", int(d.Hours()))
-	// Days
-	case d < 7*24*time.Hour:
-		dur = fmt.Sprintf("%vd", int(d.Hours())/24)
-	// Weeks
-	case d < 7*24*30*time.Hour:
-		dur = fmt.Sprintf("%vw", int(d.Hours())/7/24)
-	// Months
-	case d < 7*24*30*12*time.Hour:
-		dur = fmt.Sprintf("%vM", int(d.Hours())/30/7/28)
-	// Years
+	case d < 7*day:
+		dur = fmt.Sprintf("%vd", int(d/day))
+	case d < 30*day:
+		dur = fmt.Sprintf("%vw", int(d/(7*day)))
+	case d < 365*day:
+		dur = fmt.Sprintf("%vM", int(d/(30*day)))
 	default:
-		dur = fmt.Sprintf("%vy", int(d.Hours())/30/7/24/365)
+		dur = fmt.Sprintf("%vy", int(d/(365*day)))
 	}
 	return fmt.Sprintf("%v%v", prefix, dur)
 }

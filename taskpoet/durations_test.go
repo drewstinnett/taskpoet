@@ -52,52 +52,33 @@ func TestNewCalendar(t *testing.T) {
 }
 
 func TestShortDurations(t *testing.T) {
-	require.Equal(t, "2h", shortDuration(2*time.Hour), "simple-positive")
-	require.Equal(t, "-2h", shortDuration(-2*time.Hour), "simple-negative")
+	const day = 24 * time.Hour
 	tests := map[string]struct {
 		given  time.Duration
 		expect string
 	}{
-		"a couple hours": {
-			given:  time.Hour * 2,
-			expect: "2h",
-		},
-		"a couple hours ago": {
-			given:  -time.Hour * 2,
-			expect: "-2h",
-		},
-		"a couple days": {
-			given:  time.Hour * 49,
-			expect: "2d",
-		},
-		"a couple days ago": {
-			given:  -time.Hour * 49,
-			expect: "-2d",
-		},
-		"a couple weeks": {
-			given:  time.Hour * 24 * 15,
-			expect: "2w",
-		},
-		"a couple weeks ago": {
-			given:  -time.Hour * 24 * 15,
-			expect: "-2w",
-		},
-		"a couple months": {
-			given:  time.Hour * 24 * 7 * 70,
-			expect: "2M",
-		},
-		"a couple months ago": {
-			given:  -time.Hour * 24 * 7 * 70,
-			expect: "-2M",
-		},
-		"a year": {
-			given:  time.Hour * 24 * 7 * 30 * 400,
-			expect: "1y",
-		},
-		"a year ago": {
-			given:  -time.Hour * 24 * 7 * 30 * 400,
-			expect: "-1y",
-		},
+		"nothing":               {0, "0h"},
+		"a couple hours":        {2 * time.Hour, "2h"},
+		"almost a day":          {23*time.Hour + 59*time.Minute, "23h"},
+		"a day":                 {day, "1d"},
+		"a couple days":         {49 * time.Hour, "2d"},
+		"almost a week":         {7*day - time.Minute, "6d"},
+		"a week":                {7 * day, "1w"},
+		"a couple weeks":        {15 * day, "2w"},
+		"almost a month":        {30*day - time.Minute, "4w"},
+		"a month":               {30 * day, "1M"},
+		"a couple months":       {70 * day, "2M"},
+		"almost a year":         {365*day - time.Minute, "12M"},
+		"a year":                {365 * day, "1y"},
+		"a year and change":     {400 * day, "1y"},
+		"an imported old task":  {991 * day, "2y"},
+		"a very old task":       {20 * 365 * day, "20y"},
+		"negative hours":        {-2 * time.Hour, "-2h"},
+		"negative days":         {-49 * time.Hour, "-2d"},
+		"negative weeks":        {-15 * day, "-2w"},
+		"negative months":       {-70 * day, "-2M"},
+		"negative years":        {-400 * day, "-1y"},
+		"negative just a month": {-30 * day, "-1M"},
 	}
 	for desc, tt := range tests {
 		require.Equal(t, tt.expect, shortDuration(tt.given), desc)
